@@ -42,35 +42,21 @@ class Paragraph:
 
 
 @dataclass(frozen=True)
-class ExtractedField:
-    value: str | None
-    pattern_id: str | None
-    confidence: float
-    source: Paragraph | None
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "value": self.value,
-            "pattern_id": self.pattern_id,
-            "confidence": self.confidence,
-            "source": self.source.to_dict() if self.source else None,
-        }
-
-
-@dataclass(frozen=True)
 class OperativeSection:
     detected: bool
     start_para_index: int | None
     marker_matched: str | None
     paragraphs: list[Paragraph]
 
-    def to_dict(self) -> dict[str, Any]:
-        return {
+    def to_dict(self, include_paragraphs: bool = True) -> dict[str, Any]:
+        payload: dict[str, Any] = {
             "detected": self.detected,
             "start_para_index": self.start_para_index,
             "marker_matched": self.marker_matched,
-            "paragraphs": [paragraph.to_dict() for paragraph in self.paragraphs],
         }
+        if include_paragraphs:
+            payload["paragraphs"] = [paragraph.to_dict() for paragraph in self.paragraphs]
+        return payload
 
 
 class ExtractionError(Exception):
@@ -91,4 +77,3 @@ class EmptyPDFError(ExtractionError):
 
 class OCRFailureError(ExtractionError):
     """Raised when OCR fallback is required but fails."""
-

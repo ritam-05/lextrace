@@ -1,11 +1,10 @@
 import hashlib
 
-from fastapi import APIRouter, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, File, HTTPException, Query, UploadFile, status
 
 from backend.services.operative_isolator import isolate_operative_section
 from backend.services.paragraph_segmenter import segment_pages_into_paragraphs
 from backend.services.pdf_reader import extract_pdf_text
-from backend.services.regex_extractor import FIELD_NAMES, extract_metadata
 from backend.services.utils import (
     EmptyPDFError,
     InvalidPDFError,
@@ -57,7 +56,21 @@ def _doc_id(payload: bytes) -> str:
 
 
 @router.post("/upload")
-async def upload_pdf(file: UploadFile = File(...)) -> dict:
+async def upload_pdf(
+    file: UploadFile = File(...),
+    include_pages: bool = Query(
+        default=True,
+        description="Include page-wise extracted text.",
+    ),
+    include_paragraphs: bool = Query(
+        default=False,
+        description="Include paragraph-wise text with page mapping. Use only when the UI needs highlighting maps.",
+    ),
+    include_operative_paragraphs: bool = Query(
+        default=False,
+        description="Include operative section paragraph text instead of only operative metadata.",
+    ),
+) -> dict:
     payload = await file.read()
     _validate_pdf_upload(file, payload)
 
@@ -70,7 +83,6 @@ async def upload_pdf(file: UploadFile = File(...)) -> dict:
             raise EmptyPDFError("No paragraphs could be segmented from extracted text.")
 
         operative_section = isolate_operative_section(paragraphs)
-        metadata = extract_metadata(paragraphs, operative_section)
 
     except PasswordProtectedPDFError as exc:
         raise HTTPException(status_code=status.HTTP_423_LOCKED, detail=str(exc)) from exc
@@ -89,7 +101,7 @@ async def upload_pdf(file: UploadFile = File(...)) -> dict:
         ) from exc
 
     logger.info(
-        "pipeline_summary doc_id=%s ocr_used=%s page_count=%s para_count=%s operative_detected=%s marker=%s",
+        "text_extraction_summary doc_id=%s ocr_used=%s page_count=%s para_count=%s operative_detected=%s marker=%s",
         doc_id,
         ocr_used,
         page_count,
@@ -97,23 +109,26 @@ async def upload_pdf(file: UploadFile = File(...)) -> dict:
         operative_section.detected,
         operative_section.marker_matched,
     )
-    for field_name in FIELD_NAMES:
-        field = metadata[field_name]
-        logger.info(
-            "metadata_field doc_id=%s field=%s value=%r pattern_id=%s",
-            doc_id,
-            field_name,
-            field.value,
-            field.pattern_id,
-        )
 
-    return {
+    full_text = "\n\n".join(page.text for page in pages if page.text.strip())
+
+    response = {
         "doc_id": doc_id,
         "ocr_used": ocr_used,
-        "operative_section": operative_section.to_dict(),
-        "pages": [page.to_dict() for page in pages],
-        "paragraphs": [paragraph.to_dict() for paragraph in paragraphs],
-        "metadata": {
-            field_name: metadata[field_name].to_dict() for field_name in FIELD_NAMES
+        "stats": {
+            "page_count": page_count,
+            "paragraph_count": len(paragraphs),
+            "character_count": len(full_text),
         },
+        "full_text": full_text,
+        "operative_section": operative_section.to_dict(
+            include_paragraphs=include_operative_paragraphs
+        ),
     }
+
+    if include_pages:
+        response["pages"] = [page.to_dict() for page in pages]
+    if include_paragraphs:
+        response["paragraphs"] = [paragraph.to_dict() for paragraph in paragraphs]
+
+    return response
