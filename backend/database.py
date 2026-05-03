@@ -1,48 +1,45 @@
 import os
 from pymongo import MongoClient
-from pymongo.errors import ConnectionFailure
+from pymongo.server_api import ServerApi
 from dotenv import load_dotenv
 
-# Load environment variables from the .env file
+# Ensure environment variables are loaded
 load_dotenv()
 
-class DatabaseManager:
+MONGO_URI = os.getenv("MONGO_URI")
+
+class Database:
     client: MongoClient = None
     db = None
 
     @classmethod
     def connect(cls):
-        """Initializes the MongoDB connection pool."""
-        mongo_uri = os.getenv("MONGODB_URI")
-        db_name = os.getenv("DB_NAME", "lextrace_db")
-        
-        if not mongo_uri:
-            raise ValueError("Fatal Error: MONGODB_URI is not set in the .env file.")
-
-        try:
-            # Initialize the client. PyMongo automatically handles connection pooling.
-            print("Connecting to MongoDB Atlas...")
-            cls.client = MongoClient(mongo_uri)
+        if cls.client is None:
+            if not MONGO_URI:
+                raise ValueError("❌ MONGO_URI is not set in the .env file.")
             
-            # Send a ping to confirm a successful connection
-            cls.client.admin.command('ping')
-            print("Successfully connected to MongoDB Atlas!")
+            # ServerApi('1') is highly recommended for MongoDB Atlas stability
+            cls.client = MongoClient(MONGO_URI, server_api=ServerApi('1'))
             
-            cls.db = cls.client[db_name]
-        except ConnectionFailure as e:
-            print(f"Could not connect to MongoDB: {e}")
-            raise
-
-    @classmethod
-    def disconnect(cls):
-        """Closes the connection pool."""
-        if cls.client:
-            print("Closing MongoDB connection...")
-            cls.client.close()
+            try:
+                # Force a call to the server to verify the connection
+                cls.client.admin.command('ping')
+                print("✅ Successfully connected to MongoDB Atlas Free Tier!")
+            except Exception as e:
+                print(f"❌ Failed to connect to MongoDB: {e}")
+                raise e
+            
+            # Using 'lextrace_db' as the default database name
+            cls.db = cls.client["lextrace_db"]
 
     @classmethod
     def get_db(cls):
-        """Returns the database instance for use in routes and services."""
         if cls.db is None:
-            raise Exception("Database not initialized. Call connect() first.")
+            cls.connect()
         return cls.db
+
+    @classmethod
+    def close(cls):
+        if cls.client:
+            cls.client.close()
+            print("🔌 MongoDB Atlas connection safely closed.")

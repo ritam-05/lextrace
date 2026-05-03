@@ -1,75 +1,81 @@
 import uuid
+from typing import List, Dict, Tuple
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 class ParentDocumentChunker:
-    def __init__(self):
-        # 1. Parent Splitter: Large chunks for LLM context (approx 1500 chars)
+    def __init__(
+        self, 
+        parent_chunk_size: int = 1500, 
+        parent_overlap: int = 150,
+        child_chunk_size: int = 400, 
+        child_overlap: int = 50
+    ):
+        """
+        Initializes the chunkers for Parent Document Retrieval.
+        Legal text requires overlap so sentences aren't brutally cut in half.
+        """
+        # The parent splitter creates the large context windows for the LLM
         self.parent_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=1500,
-            chunk_overlap=0, # No overlap needed for parents if split by paragraphs cleanly
-            separators=["\n\n", "\n"]
+            chunk_size=parent_chunk_size,
+            chunk_overlap=parent_overlap,
+            separators=["\n\n", "\n", ".", " ", ""]
         )
         
-        # 2. Child Splitter: Small chunks for accurate Vector Search (approx 400 chars)
-        # 400 chars is roughly 100 tokens, perfect for bge-large semantic matching
+        # The child splitter creates the small target windows for vector search
         self.child_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=400,
-            chunk_overlap=50,
-            separators=["\n\n", "\n", ".", " "]
+            chunk_size=child_chunk_size,
+            chunk_overlap=child_overlap,
+            separators=["\n\n", "\n", ".", " ", ""]
         )
 
-    def process_document(self, raw_text: str, source_doc_id: str, case_name: str) -> dict:
+    def process_document(self, raw_text: str, document_id: str = None) -> Tuple[List[Dict], List[Dict]]:
         """
-        Takes raw text and splits it into Parent and Child document dictionaries
-        ready for MongoDB insertion.
+        Takes a sanitized PDF text string and yields parent and linked child dictionaries.
+        Keeps everything strictly in system RAM (Single-Pass Extraction constraint).
         """
-        if not raw_text or not raw_text.strip():
-            return {"parents": [], "children": []}
+        if not document_id:
+            # Fallback ID if not provided by Track A
+            document_id = f"doc_{uuid.uuid4().hex[:8]}"
 
-        parents_data = []
-        children_data = []
+        parent_documents = []
+        child_chunks = []
 
-        # Step 1: Create Parent Chunks
-        parent_chunks = self.parent_splitter.split_text(raw_text)
+        # 1. First Pass: Split raw text into large parent chunks
+        parent_texts = self.parent_splitter.split_text(raw_text)
 
-        for i, parent_text in enumerate(parent_chunks):
-            # Generate a unique ID for this specific parent paragraph
-            parent_id = str(uuid.uuid4())
+        for i, parent_text in enumerate(parent_texts):
+            # Generate a deterministic ID for tracing (e.g., doc_123_p0)
+            parent_id = f"{document_id}_p{i}"
             
-            # Create the exact citation format you want the LLM to output
-            citation_tag = f"[{case_name} - Paragraph {i+1}]"
-
-            # Build Parent Record
-            parents_data.append({
+            parent_documents.append({
                 "parent_id": parent_id,
-                "source_doc_id": source_doc_id,
+                "document_id": document_id,
                 "text": parent_text,
-                "citation": citation_tag
+                "status": "active" # For future HITL flagging
             })
 
-            # Step 2: Create Child Chunks strictly from this Parent
-            child_chunks = self.child_splitter.split_text(parent_text)
+            # 2. Second Pass: Split THIS specific parent chunk into smaller children
+            child_texts = self.child_splitter.split_text(parent_text)
             
-            for child_text in child_chunks:
-                child_id = str(uuid.uuid4())
+            for j, child_text in enumerate(child_texts):
+                child_id = f"{parent_id}_c{j}"
                 
-                # Build Child Record (This is what gets embedded!)
-                children_data.append({
+                child_chunks.append({
                     "child_id": child_id,
-                    "parent_id": parent_id, # The crucial link for PDR
-                    "source_doc_id": source_doc_id,
+                    "parent_id": parent_id, # The crucial linkage
+                    "document_id": document_id,
                     "text": child_text
+                    # We leave "embedding" empty here. Phase 3 handles that.
                 })
 
-        return {"parents": parents_data, "children": children_data}
+        print(f"🔪 Chunking Complete: Generated {len(parent_documents)} Parents and {len(child_chunks)} Children.")
+        
+        # We return both arrays cleanly to system memory
+        return parent_documents, child_chunks
 
-# --- Local Test ---
+# Quick test block to ensure it works isolated from the DB
 if __name__ == "__main__":
-    sample_text = "The court hereby orders the Ministry of Finance to audit the records. \n\n This must be completed within 90 days. Failure to comply will result in a penalty. \n\n Furthermore, the respondent is directed to submit all tax filings from the year 2024."
-    
+    dummy_text = "This is a mock judgment. " * 200 # Roughly a page of text
     chunker = ParentDocumentChunker()
-    # Using your name as a dummy doc ID for testing
-    data = chunker.process_document(sample_text, source_doc_id="doc_straws", case_name="State vs. XYZ")
-    
-    print(f"Generated {len(data['parents'])} Parents and {len(data['children'])} Children.")
-    print("First Child Document:", data['children'][0])
+    parents, children = chunker.process_document(dummy_text, "test_judgment")
+    print(f"Sample Child Map -> {children[0]['child_id']} links to {children[0]['parent_id']}")
