@@ -1,14 +1,10 @@
-import os
-from pymongo import MongoClient
 from sentence_transformers import SentenceTransformer
+from backend.database import DatabaseManager
 
 class RAGService:
     def __init__(self):
-        # 1. Initialize MongoDB Connection
-        # Make sure MONGODB_URI is in your .env file
-        mongo_uri = os.getenv("MONGODB_URI", "mongodb://localhost:27017")
-        self.client = MongoClient(mongo_uri)
-        self.db = self.client[os.getenv("DB_NAME", "lextrace_db")]
+        # 1. Grab the shared database connection
+        self.db = DatabaseManager.get_db()
         
         # We need two collections for Parent-Document Retrieval
         self.parents_collection = self.db["parent_documents"]
@@ -16,7 +12,6 @@ class RAGService:
 
         # 2. Initialize BGE-Large on CUDA
         print("Loading BGE-Large model on CUDA...")
-        # device='cuda' forces it to use your RTX 2050
         self.embedding_model = SentenceTransformer("BAAI/bge-large-en-v1.5", device="cuda")
         print("Model loaded successfully.")
 
