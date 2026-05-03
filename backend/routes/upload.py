@@ -1,10 +1,11 @@
 import hashlib
 
-from fastapi import APIRouter, File, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, File, HTTPException, UploadFile, status
 
 from backend.services.operative_isolator import isolate_operative_section
 from backend.services.paragraph_segmenter import segment_pages_into_paragraphs
 from backend.services.pdf_reader import extract_pdf_text
+from backend.services.zone_extractor import ZoneExtractor
 from backend.services.utils import (
     EmptyPDFError,
     InvalidPDFError,
@@ -56,21 +57,7 @@ def _doc_id(payload: bytes) -> str:
 
 
 @router.post("/upload")
-async def upload_pdf(
-    file: UploadFile = File(...),
-    include_pages: bool = Query(
-        default=True,
-        description="Include page-wise extracted text.",
-    ),
-    include_paragraphs: bool = Query(
-        default=False,
-        description="Include paragraph-wise text with page mapping. Use only when the UI needs highlighting maps.",
-    ),
-    include_operative_paragraphs: bool = Query(
-        default=False,
-        description="Include operative section paragraph text instead of only operative metadata.",
-    ),
-) -> dict:
+async def upload_pdf(file: UploadFile = File(...)) -> dict:
     payload = await file.read()
     _validate_pdf_upload(file, payload)
 
@@ -83,6 +70,9 @@ async def upload_pdf(
             raise EmptyPDFError("No paragraphs could be segmented from extracted text.")
 
         operative_section = isolate_operative_section(paragraphs)
+        extracted_zones = ZoneExtractor(
+            [paragraph.to_dict() for paragraph in paragraphs]
+        ).extract_all()
 
     except PasswordProtectedPDFError as exc:
         raise HTTPException(status_code=status.HTTP_423_LOCKED, detail=str(exc)) from exc
@@ -112,7 +102,7 @@ async def upload_pdf(
 
     full_text = "\n\n".join(page.text for page in pages if page.text.strip())
 
-    response = {
+    return {
         "doc_id": doc_id,
         "ocr_used": ocr_used,
         "stats": {
@@ -121,14 +111,8 @@ async def upload_pdf(
             "character_count": len(full_text),
         },
         "full_text": full_text,
-        "operative_section": operative_section.to_dict(
-            include_paragraphs=include_operative_paragraphs
-        ),
+        "operative_section": operative_section.to_dict(include_paragraphs=True),
+        "pages": [page.to_dict() for page in pages],
+        "paragraphs": [paragraph.to_dict() for paragraph in paragraphs],
+        "extracted_zones": extracted_zones,
     }
-
-    if include_pages:
-        response["pages"] = [page.to_dict() for page in pages]
-    if include_paragraphs:
-        response["paragraphs"] = [paragraph.to_dict() for paragraph in paragraphs]
-
-    return response
