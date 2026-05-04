@@ -1,5 +1,6 @@
 import gc
 import torch
+import time
 from typing import List, Dict
 from backend.state import ml_models
 from backend.database import Database
@@ -68,10 +69,10 @@ class RAGService:
             print(f"❌ MongoDB Insertion Failed: {e}")
             raise e
         
+
     def retrieve_context(self, query: str, top_k: int = 5) -> str:
         """
-        Embeds the query with the strict BGE prefix, executes vector search on child chunks,
-        and returns the deduplicated parent contexts.
+        Embeds the query, executes vector search, and strictly preserves semantic ranking.
         """
         model = ml_models.get("bge")
         db = Database.get_db()
@@ -79,23 +80,27 @@ class RAGService:
         if not model:
             raise RuntimeError("❌ BGE model not loaded in VRAM.")
 
-        # 1. Embed Query WITH Prefix (Crucial for BGE-large-en-v1.5)
+        # --- THE SYNC DELAY (Hackathon Fix) ---
+        # Atlas M0 Free Tier needs a moment to index newly inserted vectors.
+        # If running a single combined upload/search route, we must wait.
+        print("⏳ Waiting 3 seconds for Atlas Vector Index to sync...")
+        time.sleep(3)
+
+        # 1. Embed Query WITH Prefix
         prefix = "Represent this sentence for searching relevant passages: "
         full_query = prefix + query
 
-        # Disable gradients to protect VRAM, immediately offload to CPU RAM
         with torch.no_grad():
             query_vector = model.encode(full_query, convert_to_tensor=True).cpu().tolist()
 
         # 2. Atlas Vector Search Pipeline
-        # We search the small child chunks for high semantic precision
         pipeline = [
             {
                 "$vectorSearch": {
-                    "index": "vector_index", # The exact name you configured in the UI
+                    "index": "vector_index", 
                     "path": "embedding",
                     "queryVector": query_vector,
-                    "numCandidates": top_k * 10, # Required by Atlas (usually top_k * 10)
+                    "numCandidates": top_k * 10, 
                     "limit": top_k
                 }
             },
@@ -114,17 +119,29 @@ class RAGService:
             print("⚠️ No relevant chunks found in the database.")
             return ""
 
-        # 3. Parent-Document Retrieval (PDR) Deduplication
-        # Multiple highly relevant child chunks might come from the same parent.
-        # We use a set to ensure we don't feed the LLM duplicate text.
-        parent_ids = list(set([res["parent_id"] for res in search_results]))
+        # 3. Preserving Semantic Rank
+        # We loop through results and keep the exact ordered sequence of parent IDs.
+        ordered_parent_ids = []
+        for res in search_results:
+            pid = res["parent_id"]
+            if pid not in ordered_parent_ids:
+                ordered_parent_ids.append(pid)
 
         # 4. Fetch Full Parent Contexts
-        parents = list(db.parent_documents.find({"parent_id": {"$in": parent_ids}}))
+        # MongoDB $in queries return documents in random disk order. 
+        unordered_parents = list(db.parent_documents.find({"parent_id": {"$in": ordered_parent_ids}}))
         
-        # 5. Compile final string for the LLM
-        context = "\n\n".join([p["text"] for p in parents])
-        print(f"✅ Retrieved {len(parents)} unique parent contexts for the LLM.")
+        # 5. Rebuild the Strict Ordering
+        # Map the random output back to our mathematically ranked sequence
+        parent_map = {p["parent_id"]: p["text"] for p in unordered_parents}
+        
+        ordered_texts = []
+        for pid in ordered_parent_ids:
+            if pid in parent_map:
+                ordered_texts.append(parent_map[pid])
+
+        context = "\n\n".join(ordered_texts)
+        print(f"✅ Retrieved and ordered {len(ordered_texts)} unique parent contexts.")
         
         return context
 

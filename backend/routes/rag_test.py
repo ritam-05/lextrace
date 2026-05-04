@@ -1,7 +1,7 @@
 import uuid
 import fitz  # PyMuPDF
 from fastapi import APIRouter, UploadFile, File, HTTPException
-from backend.rag_engine.chunker import ParentDocumentChunker
+from backend.rag_engine.chunker import LegalDocumentChunker
 from backend.rag_engine.embeddings import RAGService
 from backend.rag_engine.generator import ActionPlanGenerator
 from backend.database import Database
@@ -9,7 +9,7 @@ from backend.database import Database
 router = APIRouter()
 
 # Initialize singletons for the route
-chunker = ParentDocumentChunker()
+chunker = LegalDocumentChunker()
 rag_service = RAGService(batch_size=16)  # Strict VRAM constraint
 generator = ActionPlanGenerator()
 
@@ -49,7 +49,7 @@ async def process_judgment(file: UploadFile = File(...)):
 
     # 3. Context Retrieval
     # We formulate a highly specific query to target actionable legal directives
-    search_query = "explicit court orders, directives, deadlines, and the government or police departments responsible for compliance"
+    search_query = "What are the final operational directives, orders, and deadlines issued by the court, and which specific departments are instructed to take action?"
     retrieved_context = rag_service.retrieve_context(search_query, top_k=5)
 
     if not retrieved_context:

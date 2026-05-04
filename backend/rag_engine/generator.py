@@ -13,7 +13,7 @@ class ActionPlanGenerator:
         
         self.client = Groq(api_key=api_key)
         # Using LLaMA 3 8B. It's incredibly fast on Groq and strictly follows JSON schemas.
-        self.model = "llama3-8b-8192" 
+        self.model = "llama-3.1-8b-instant" 
 
     def generate(self, context: str, hard_facts: dict) -> dict:
         """
