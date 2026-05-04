@@ -93,17 +93,29 @@ class Arbitrator:
         self,
         field_name: str,
         regex_output: Optional[Dict[str, Any]],
-        rag_output: Optional[Dict[str, Any]]
+        rag_output: Optional[Any]
     ) -> ArbitrationResult:
         """
         Arbitrate a single field between Regex and RAG outputs.
         Returns ArbitrationResult with verdict and confidence.
         """
+        # Handle regex output (structured dict)
         regex_value = regex_output.get("value") if regex_output else None
-        rag_value = rag_output.get("value") if rag_output else None
-        
         regex_confidence = regex_output.get("confidence", 0.8) if regex_output else 0.0
-        rag_confidence = rag_output.get("confidence", 0.8) if rag_output else 0.0
+        
+        # Handle RAG output (can be string, list, or dict)
+        if isinstance(rag_output, dict):
+            rag_value = rag_output.get("value")
+            rag_confidence = rag_output.get("confidence", 0.8)
+        elif isinstance(rag_output, str):
+            rag_value = rag_output if rag_output.strip() else None
+            rag_confidence = 0.8
+        elif isinstance(rag_output, list):
+            rag_value = rag_output if rag_output else None
+            rag_confidence = 0.8
+        else:
+            rag_value = None
+            rag_confidence = 0.0
         
         # Both sources found the field
         if regex_value and rag_value:
@@ -155,15 +167,23 @@ class Arbitrator:
             regex_source = {
                 "para_index": regex_output.get("para_index"),
                 "char_start": regex_output.get("char_start"),
-                "char_end": regex_output.get("char_end")
+                "char_end": regex_output.get("char_end"),
+                "source": regex_output.get("source")
             }
         
         rag_source = None
         if rag_output:
-            rag_source = {
-                "para_indices": rag_output.get("para_indices"),
-                "confidence": rag_output.get("confidence")
-            }
+            if isinstance(rag_output, dict):
+                rag_source = {
+                    "para_indices": rag_output.get("para_indices"),
+                    "confidence": rag_output.get("confidence")
+                }
+            else:
+                # For direct values from RAG, we don't have detailed source info
+                rag_source = {
+                    "para_indices": None,
+                    "confidence": rag_confidence
+                }
         
         return ArbitrationResult(
             field_name=field_name,
@@ -191,14 +211,14 @@ class Arbitrator:
         # 1. Arbitrate overlapping fields
         for field in self.OVERLAPPING_FIELDS:
             regex_field = regex_output.get(field)
-            rag_field = rag_output.get(field)
+            rag_field = rag_output.get(field)  # This is now the direct value
             
             result = self.arbitrate_field(field, regex_field, rag_field)
             results[field] = result
         
         # 2. Add RAG-only fields (auto-marked as single_source_rag)
         for field in self.RAG_ONLY_FIELDS:
-            rag_field = rag_output.get(field)
+            rag_field = rag_output.get(field)  # This is now the direct value
             
             if rag_field:
                 result = self.arbitrate_field(field, None, rag_field)

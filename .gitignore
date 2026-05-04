@@ -13,7 +13,7 @@ htmlcov/
 venv/
 env/
 ENV/
-
+venv311/
 # Environment and local config
 .env
 .env.*
