@@ -117,7 +117,11 @@ class ZoneParagraph:
 
     @property
     def source(self) -> dict[str, Any]:
-        return {"page": self.page, "paragraph_text": self.text}
+        return {
+            "page": self.page,
+            "para_index": self.index,
+            "paragraph_text": self.text
+        }
 
 
 @dataclass(frozen=True)
@@ -267,13 +271,21 @@ class BaseExtractor:
 
     @staticmethod
     def _empty_field() -> dict[str, Any]:
-        return {"value": "", "source": {}}
+        return {"value": "", "confidence": 0.0, "para_index": None, "char_start": None, "char_end": None}
 
     @staticmethod
     def _field(candidate: SpanCandidate | None) -> dict[str, Any]:
         if not candidate:
-            return {"value": "", "source": {}}
-        return {"value": candidate.value, "source": candidate.paragraph.source}
+            return {"value": "", "confidence": 0.0, "para_index": None, "char_start": None, "char_end": None}
+        return {
+            "value": candidate.value,
+            "confidence": 0.85,  # Regex extraction confidence
+            "para_index": candidate.paragraph.index,
+            "char_start": candidate.start,
+            "char_end": candidate.end,
+            "page": candidate.paragraph.page,
+            "source": candidate.paragraph.source
+        }
 
     @staticmethod
     def _best(candidates: list[SpanCandidate]) -> SpanCandidate | None:

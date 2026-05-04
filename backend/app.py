@@ -9,6 +9,7 @@ from backend.database import Database
 #app.include_router(upload_router, prefix="/api")
 from backend.state import ml_models
 from backend.routes.rag_test import router as upload_router
+from backend.routes.verification import router as verification_router
 
 
 
@@ -58,6 +59,7 @@ async def lifespan(app: FastAPI):
 # Initialize the FastAPI app with the lifespan context
 app = FastAPI(lifespan=lifespan, title="LexTrace Core API")
 app.include_router(upload_router, prefix="/api")
+app.include_router(verification_router, prefix="/api")
 
 @app.get("/health")
 async def health_check():

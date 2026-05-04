@@ -15,22 +15,33 @@ class ActionPlanGenerator:
         # Using LLaMA 3 8B. It's incredibly fast on Groq and strictly follows JSON schemas.
         self.model = "llama-3.1-8b-instant" 
 
-    def generate(self, context: str, hard_facts: dict) -> dict:
+    def generate(self, context: str, hard_facts: dict = None) -> dict:
         """
-        Takes the retrieved context and forces the LLM to output a structured JSON Action Plan.
+        Takes the retrieved context and forces the LLM to output a structured JSON with:
+        - Case metadata (case_number, bench, court_name, etc.)
+        - Action Plan (directives, responsible_departments, deadlines)
         """
+        hard_facts = hard_facts or {}
+        
         prompt = f"""
         You are a highly analytical legal AI system for the Indian justice department.
-        Your task is to extract a structured action plan based ONLY on the provided Context from a court judgment.
+        Your task is to extract BOTH case metadata AND action plan from the provided context.
         
-        Case Facts: {json.dumps(hard_facts)}
+        Previous Hard Facts (from Regex): {json.dumps(hard_facts)}
         
-        Context:
+        Context (operative section):
         {context}
         
         You must return ONLY a valid JSON object matching the exact schema below. Do not output markdown code blocks. Do not add conversational preamble.
+        Extract with high precision - these will be compared with regex extraction.
         
         {{
+            "case_number": "extracted case number if found",
+            "court_name": "extracted court name if found",
+            "bench": "extracted bench/judge names if found",
+            "judgment_date": "extracted judgment date if found",
+            "petitioner": "extracted petitioner name if found",
+            "respondent": "extracted respondent name if found",
             "directives": ["list of explicit orders or actions commanded by the court"],
             "responsible_departments": ["list of government or police departments mentioned for action"],
             "deadlines": ["list of mentioned dates, timelines, or compliance periods"],
@@ -38,7 +49,7 @@ class ActionPlanGenerator:
         }}
         """
         
-        print("🧠 Transmitting context to Groq LLM for Action Plan extraction...")
+        print("🧠 Transmitting context to Groq LLM for comprehensive extraction...")
         
         try:
             response = self.client.chat.completions.create(
@@ -51,12 +62,18 @@ class ActionPlanGenerator:
             
             # The JSON object is returned as a string, parse it into a Python dict
             result = json.loads(response.choices[0].message.content)
-            print("✅ Successfully generated JSON Action Plan.")
+            print("✅ Successfully generated comprehensive extraction with action plan.")
             return result
             
         except json.JSONDecodeError:
             print("❌ LLM failed to output valid JSON. Falling back to empty schema.")
             return {
+                "case_number": "",
+                "court_name": "",
+                "bench": "",
+                "judgment_date": "",
+                "petitioner": "",
+                "respondent": "",
                 "directives": ["Error parsing LLM output"], 
                 "responsible_departments": [], 
                 "deadlines": [], 
