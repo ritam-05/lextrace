@@ -1,75 +1,112 @@
+import re
 import uuid
-from langchain_text_splitters import RecursiveCharacterTextSplitter
+from typing import List, Dict, Tuple
 
-class ParentDocumentChunker:
-    def __init__(self):
-        # 1. Parent Splitter: Large chunks for LLM context (approx 1500 chars)
-        self.parent_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=1500,
-            chunk_overlap=0, # No overlap needed for parents if split by paragraphs cleanly
-            separators=["\n\n", "\n"]
+class LegalDocumentChunker:
+    def __init__(self, parent_chunk_size: int = 1500, child_chunk_size: int = 400):
+        self.parent_chunk_size = parent_chunk_size
+        self.child_chunk_size = child_chunk_size
+        
+        # 1. Boilerplate Vaporizer
+        # Targets "Page X of Y", isolated page numbers, and common court headers
+        self.header_footer_pattern = re.compile(
+            r"(?i)(page\s+\d+\s+of\s+\d+|^\s*\d+\s*$|in the high court of.+|signature not verified)",
+            re.MULTILINE
         )
         
-        # 2. Child Splitter: Small chunks for accurate Vector Search (approx 400 chars)
-        # 400 chars is roughly 100 tokens, perfect for bge-large semantic matching
-        self.child_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=400,
-            chunk_overlap=50,
-            separators=["\n\n", "\n", ".", " "]
+        # 2. Abbreviation-Safe Sentence Splitter (The Secret Weapon)
+        # Uses Negative Lookbehinds. It splits on a period + space ONLY IF 
+        # it is NOT preceded by legal abbreviations like v, vs, u/s, No, Hon'ble, etc.
+        self.sentence_end_pattern = re.compile(
+            r"(?<!\bv)(?<!\bvs)(?<!\bu/s)(?<!\bNo)(?<!Hon'ble)(?<!\bMr)(?<!\bO)(?<!\bR)\.\s+"
         )
 
-    def process_document(self, raw_text: str, source_doc_id: str, case_name: str) -> dict:
-        """
-        Takes raw text and splits it into Parent and Child document dictionaries
-        ready for MongoDB insertion.
-        """
-        if not raw_text or not raw_text.strip():
-            return {"parents": [], "children": []}
+    def sanitize(self, raw_text: str) -> str:
+        """Strips repeating headers/footers before chunking even begins."""
+        # Remove headers and footers
+        clean = self.header_footer_pattern.sub("", raw_text)
+        
+        # Fix broken lines (single newlines in the middle of sentences caused by PyMuPDF)
+        clean = re.sub(r"(?<!\n)\n(?!\n)", " ", clean)
+        
+        # Collapse multiple whitespace/newlines into clean paragraph breaks
+        clean = re.sub(r"\n{3,}", "\n\n", clean)
+        clean = re.sub(r" {2,}", " ", clean)
+        
+        return clean.strip()
 
-        parents_data = []
-        children_data = []
-
-        # Step 1: Create Parent Chunks
-        parent_chunks = self.parent_splitter.split_text(raw_text)
-
-        for i, parent_text in enumerate(parent_chunks):
-            # Generate a unique ID for this specific parent paragraph
-            parent_id = str(uuid.uuid4())
+    def split_into_chunks(self, text: str, max_chars: int) -> List[str]:
+        """Custom semantic splitter that respects legal abbreviations and paragraph boundaries."""
+        chunks = []
+        current_chunk = ""
+        
+        # Split by actual paragraphs first (safest semantic boundary in legal text)
+        paragraphs = text.split("\n\n")
+        
+        for para in paragraphs:
+            # If a single paragraph is massive, we must split it by sentences safely
+            if len(para) > max_chars:
+                sentences = self.sentence_end_pattern.split(para)
+                for sentence in sentences:
+                    # Re-attach the period that was consumed by the regex split
+                    sentence = sentence.strip() + ". " 
+                    
+                    if len(current_chunk) + len(sentence) <= max_chars:
+                        current_chunk += sentence
+                    else:
+                        if current_chunk: 
+                            chunks.append(current_chunk.strip())
+                        current_chunk = sentence
+            else:
+                # If paragraph fits, add it to the current chunk
+                if len(current_chunk) + len(para) + 2 <= max_chars:
+                    current_chunk += para + "\n\n"
+                else:
+                    if current_chunk: 
+                        chunks.append(current_chunk.strip())
+                    current_chunk = para + "\n\n"
+                    
+        if current_chunk:
+            chunks.append(current_chunk.strip())
             
-            # Create the exact citation format you want the LLM to output
-            citation_tag = f"[{case_name} - Paragraph {i+1}]"
+        return chunks
 
-            # Build Parent Record
-            parents_data.append({
+    def process_document(self, raw_text: str, document_id: str = None) -> Tuple[List[Dict], List[Dict]]:
+        """
+        Executes the single-pass extraction, yielding clean parents and children 
+        directly into system RAM.
+        """
+        if not document_id:
+            document_id = f"doc_{uuid.uuid4().hex[:8]}"
+
+        parent_documents = []
+        child_chunks = []
+
+        # Phase 1: Aggressive Sanitization
+        clean_text = self.sanitize(raw_text)
+
+        # Phase 2: Semantic Parent Generation (No forced arbitrary overlap)
+        parent_texts = self.split_into_chunks(clean_text, self.parent_chunk_size)
+
+        for i, parent_text in enumerate(parent_texts):
+            parent_id = f"{document_id}_p{i}"
+            parent_documents.append({
                 "parent_id": parent_id,
-                "source_doc_id": source_doc_id,
+                "document_id": document_id,
                 "text": parent_text,
-                "citation": citation_tag
+                "status": "active"
             })
 
-            # Step 2: Create Child Chunks strictly from this Parent
-            child_chunks = self.child_splitter.split_text(parent_text)
+            # Phase 3: Semantic Child Generation strictly within parent bounds
+            child_texts = self.split_into_chunks(parent_text, self.child_chunk_size)
             
-            for child_text in child_chunks:
-                child_id = str(uuid.uuid4())
-                
-                # Build Child Record (This is what gets embedded!)
-                children_data.append({
-                    "child_id": child_id,
-                    "parent_id": parent_id, # The crucial link for PDR
-                    "source_doc_id": source_doc_id,
+            for j, child_text in enumerate(child_texts):
+                child_chunks.append({
+                    "child_id": f"{parent_id}_c{j}",
+                    "parent_id": parent_id,
+                    "document_id": document_id,
                     "text": child_text
                 })
 
-        return {"parents": parents_data, "children": children_data}
-
-# --- Local Test ---
-if __name__ == "__main__":
-    sample_text = "The court hereby orders the Ministry of Finance to audit the records. \n\n This must be completed within 90 days. Failure to comply will result in a penalty. \n\n Furthermore, the respondent is directed to submit all tax filings from the year 2024."
-    
-    chunker = ParentDocumentChunker()
-    # Using your name as a dummy doc ID for testing
-    data = chunker.process_document(sample_text, source_doc_id="doc_straws", case_name="State vs. XYZ")
-    
-    print(f"Generated {len(data['parents'])} Parents and {len(data['children'])} Children.")
-    print("First Child Document:", data['children'][0])
+        print(f"🔪 Legal Chunking Complete: Generated {len(parent_documents)} Parents and {len(child_chunks)} Children.")
+        return parent_documents, child_chunks
