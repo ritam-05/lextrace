@@ -19,11 +19,11 @@ class RAGService:
         # 1. Fetch resources
         model = ml_models.get("bge")
         if not model:
-            raise RuntimeError("❌ BGE model not loaded in VRAM. Is the FastAPI server running?")
+            raise RuntimeError("BGE model not loaded in VRAM. Is the FastAPI server running?")
         
         db = Database.get_db()
 
-        print(f"⚙️ Starting strictly batched embedding for {len(child_chunks)} chunks (Batch Size: {self.batch_size})...")
+        print(f"Starting strictly batched embedding for {len(child_chunks)} chunks (Batch Size: {self.batch_size})...")
         
         # 2. Extract texts for the embedding model
         # NOTE: BGE models DO NOT use the "Represent this sentence..." prefix for DOCUMENTS. 
@@ -57,93 +57,172 @@ class RAGService:
         print("🧹 Chunk encoding complete. VRAM aggressively flushed and garbage collected.")
 
         # 5. MongoDB Ingestion (System RAM -> Network)
-        print("☁️ Pushing vectors and text to MongoDB Atlas...")
+        print("Pushing vectors and text to MongoDB Atlas...")
         try:
             # We insert parents (text only) and children (text + 1024d vector)
             if parent_documents:
                 db.parent_documents.insert_many(parent_documents)
             if child_chunks:
                 db.child_chunks.insert_many(child_chunks)
-            print(f"✅ Successfully ingested {len(parent_documents)} parents and {len(child_chunks)} children.")
+            print(f"Successfully ingested {len(parent_documents)} parents and {len(child_chunks)} children.")
         except Exception as e:
-            print(f"❌ MongoDB Insertion Failed: {e}")
+            print(f"MongoDB Insertion Failed: {e}")
             raise e
         
 
-    def retrieve_context(self, query: str, top_k: int = 5) -> str:
+    def retrieve_context(self, semantic_query: str, keyword_query: str, top_k: int = 5) -> str:
         """
-        Embeds the query, executes vector search, and strictly preserves semantic ranking.
+        Executes parallel Vector and BM25 searches using decoupled queries, 
+        fuses them via RRF, and chronologically reconstructs parent contexts.
         """
         model = ml_models.get("bge")
         db = Database.get_db()
 
         if not model:
-            raise RuntimeError("❌ BGE model not loaded in VRAM.")
+            raise RuntimeError("BGE model not loaded in VRAM.")
 
         # --- THE SYNC DELAY (Hackathon Fix) ---
-        # Atlas M0 Free Tier needs a moment to index newly inserted vectors.
-        # If running a single combined upload/search route, we must wait.
-        print("⏳ Waiting 3 seconds for Atlas Vector Index to sync...")
-        time.sleep(3)
+        print("Waiting 11 seconds for Atlas Indexes to sync...")
+        time.sleep(11)
 
-        # 1. Embed Query WITH Prefix
+        # ==========================================
+        # QUERY A: DENSE VECTOR SEARCH (Semantic)
+        # ==========================================
         prefix = "Represent this sentence for searching relevant passages: "
-        full_query = prefix + query
+        full_semantic_query = prefix + semantic_query
 
         with torch.no_grad():
-            query_vector = model.encode(full_query, convert_to_tensor=True).cpu().tolist()
+            query_vector = model.encode(full_semantic_query, convert_to_tensor=True).cpu().tolist()
 
-        # 2. Atlas Vector Search Pipeline
-        pipeline = [
+        vector_pipeline = [
             {
                 "$vectorSearch": {
                     "index": "vector_index", 
                     "path": "embedding",
                     "queryVector": query_vector,
                     "numCandidates": top_k * 10, 
-                    "limit": top_k
+                    "limit": top_k * 2
                 }
             },
             {
                 "$project": {
+                    "child_id": 1,
                     "parent_id": 1,
                     "score": { "$meta": "vectorSearchScore" }
                 }
             }
         ]
 
-        print(f"🔍 Executing vector search for query: '{query}'")
-        search_results = list(db.child_chunks.aggregate(pipeline))
+        print(f"Executing vector search...")
+        vector_results = list(db.child_chunks.aggregate(vector_pipeline))
 
-        if not search_results:
-            print("⚠️ No relevant chunks found in the database.")
+        # ==========================================
+        # QUERY B: SPARSE TEXT SEARCH (BM25 Keyword)
+        # ==========================================
+        text_pipeline = [
+            {
+                "$search": {
+                    "index": "default", 
+                    "text": {
+                        "query": keyword_query,
+                        "path": "text"
+                    }
+                }
+            },
+            { "$limit": top_k * 2 },
+            {
+                "$project": {
+                    "child_id": 1,
+                    "parent_id": 1,
+                    "score": { "$meta": "searchScore" }
+                }
+            }
+        ]
+
+        print(f"Executing BM25 keyword search...")
+        text_results = list(db.child_chunks.aggregate(text_pipeline))
+
+        # ==========================================
+        # RECIPROCAL RANK FUSION (RRF)
+        # ==========================================
+        # Formula: 1 / (k + Rank_vector) + 1 / (k + Rank_keyword) where k = 60
+        k = 60
+        rrf_scores = {}
+
+        for rank, res in enumerate(vector_results):
+            cid = res.get("child_id", str(res.get("_id")))
+            pid = res.get("parent_id")
+            rrf_scores[cid] = {
+                "score": 1.0 / (k + rank + 1),
+                "parent_id": pid
+            }
+
+        for rank, res in enumerate(text_results):
+            cid = res.get("child_id", str(res.get("_id")))
+            pid = res.get("parent_id")
+            if cid in rrf_scores:
+                rrf_scores[cid]["score"] += 1.0 / (k + rank + 1)
+            else:
+                rrf_scores[cid] = {
+                    "score": 1.0 / (k + rank + 1),
+                    "parent_id": pid
+                }
+
+        # Sort chunks by unified RRF score descending
+        sorted_chunks = sorted(rrf_scores.items(), key=lambda item: item[1]["score"], reverse=True)
+
+        # Extract top distinct parent_ids
+        distinct_parents = []
+        for cid, data in sorted_chunks:
+            pid = data["parent_id"]
+            if pid and pid not in distinct_parents:
+                distinct_parents.append(pid)
+            if len(distinct_parents) == top_k:
+                break
+
+        if not distinct_parents:
+            print("No relevant chunks found across both indexes.")
             return ""
 
-        # 3. Preserving Semantic Rank
-        # We loop through results and keep the exact ordered sequence of parent IDs.
-        ordered_parent_ids = []
-        for res in search_results:
-            pid = res["parent_id"]
-            if pid not in ordered_parent_ids:
-                ordered_parent_ids.append(pid)
-
-        # 4. Fetch Full Parent Contexts
-        # MongoDB $in queries return documents in random disk order. 
-        unordered_parents = list(db.parent_documents.find({"parent_id": {"$in": ordered_parent_ids}}))
-        
-        # 5. Rebuild the Strict Ordering
-        # Map the random output back to our mathematically ranked sequence
+        # ==========================================
+        # SEQUENTIAL PARENT RECONSTRUCTION
+        # ==========================================
+        unordered_parents = list(db.parent_documents.find({"parent_id": {"$in":distinct_parents}}))
         parent_map = {p["parent_id"]: p["text"] for p in unordered_parents}
-        
+
+        # CRUCIAL FIX: Sort distinct_parents chronologically by their suffix (e.g., doc123_p1,  doc123_p2)
+        # This prevents the LLM from hallucinating legal timelines.
+        def extract_sequence(pid: str) -> int:
+            try:
+                return int(pid.split('_p')[-1])
+            except ValueError:
+                return 0
+
+        chronological_parents = sorted(distinct_parents, key=extract_sequence)
+
         ordered_texts = []
-        for pid in ordered_parent_ids:
+        for pid in chronological_parents:
             if pid in parent_map:
                 ordered_texts.append(parent_map[pid])
 
         context = "\n\n".join(ordered_texts)
-        print(f"✅ Retrieved and ordered {len(ordered_texts)} unique parent contexts.")
-        
+        print(f"Reconstructed {len(ordered_texts)} parent contexts in chronological order.")
+
         return context
+
+    def delete_document_data(self, document_id: str):
+        """
+        Deletes all temporary parent/child records for a processed document.
+        """
+        db = Database.get_db()
+        parent_result = db.parent_documents.delete_many({"document_id": document_id})
+        child_result = db.child_chunks.delete_many({"document_id": document_id})
+
+        print(
+            f"Cleaned up temporary RAG data for {document_id}: "
+            f"{parent_result.deleted_count} parent chunks, "
+            f"{child_result.deleted_count} child chunks deleted."
+        )
 
 # Quick test block
 if __name__ == "__main__":
