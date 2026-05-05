@@ -46,6 +46,12 @@ async def process_judgment(file: UploadFile = File(...)):
             raise HTTPException(status_code=400, detail="Could not extract readable text from the PDF. It may be a scanned image requiring OCR.")
 
         print(f"Extracted {len(raw_text)} characters of raw text.")
+
+        header_chunk = raw_text[:250]
+        print(" [LLM] Extracting basic metadata from the first 150 characters...")
+        header_metadata = generator.extract_basic_metadata(header_chunk)
+        print(f" [LLM] Header Metadata: {header_metadata}")
+
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"PDF Parsing Failed: {str(e)}")
 
@@ -142,6 +148,7 @@ async def process_judgment(file: UploadFile = File(...)):
                 "document_id": document_id,
                 "filename": file.filename,
                 "extraction_type": "arbitration_result",
+                "header_metadata": header_metadata,
                 "regex_output": regex_output,
                 "rag_output": rag_output,
                 "arbitration_results": {
@@ -188,6 +195,7 @@ async def process_judgment(file: UploadFile = File(...)):
         return {
             "status": "success",
             "document_id": document_id,
+            "header_metadata": header_metadata,
             "arbitration_results": arbitration_results_formatted,
             "arbitration_summary": arbitration_summary,
             "regex_output": regex_output,

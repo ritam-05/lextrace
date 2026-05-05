@@ -40,11 +40,11 @@ class ActionPlanGenerator:
         {{
             "Extraction": {{
             "Date_of_Order": "Exact date if mentioned",
-            "Parties_Involved": ["Party 1", "Party 2"],
-            "Key_Directions": ["Direction 1", "Direction 2"]
+            "Parties_Involved": ["Party 1", "Party 2, etc"],
+            "Key_Directions": ["Direction 1", "Direction 2, etc"]
         }},
           "Action_Plan": {{
-            "Compliance_Required": "What specifically needs to be done?",
+            "Compliance_Required": "What specifically needs to be done? (Provide short supporting points)",
             "Consideration_for_Appeal": "Is there a mention of appealing to a higher court? (Yes/No/Not Specified)",
             "Key_Timelines": ["Timeline 1", "Timeline 2"],
             "Responsible_Departments": ["Dept 1", "Dept 2"],
@@ -75,6 +75,40 @@ class ActionPlanGenerator:
                 "deadlines": [], 
                 "status": "failed_generation"
             }
+
+    def extract_basic_metadata(self, text_chunk: str) -> dict:
+        """
+        Extracts the Judge's Name and Date of Order from a provided text chunk.
+        """
+        prompt = f"""
+        You are a Legal AI Extraction System. 
+        Read the following text excerpt from the beginning of a court judgment.
+        Extract the "Name of the judge (including initials)" and the "Date of order".
+        If a piece of information is missing, output "Not Specified".
+        
+        Text Excerpt:
+        {text_chunk}
+
+        You must return ONLY a valid JSON object matching the exact schema below. Do not add conversational preamble.
+        REQUIRED JSON SCHEMA:
+        {{
+            "Name_of_the_judge": "Extracted name or Not Specified",
+            "Date_of_order": "Extracted date or Not Specified"
+        }}
+        """
+
+        try:
+            response = self.client.chat.completions.create(
+                messages=[{"role": "user", "content": prompt}],
+                model=self.model,
+                response_format={"type": "json_object"},
+                temperature=0.0,
+            )
+            return json.loads(response.choices[0].message.content)
+        except Exception as e:
+            print(f" Metadata extraction failed: {e}")
+            return {"Name_of_the_judge": "Error", "Date_of_order": "Error"}
+
         except Exception as e:
             print(f" Groq API Error: {e}")
             raise e
