@@ -168,48 +168,31 @@ async def process_judgment(file: UploadFile = File(...)):
         except Exception as e:
             print(f"❌ Failed to save to MongoDB: {e}")
 
-        # Build per-field detailed view for API response
-        field_level: dict[str, dict] = {}
-        for field_name, result in arbitration_results.items():
-            regex_field = regex_output.get(field_name, {}) if isinstance(regex_output, dict) else {}
-            rag_field = rag_output.get(field_name, {}) if isinstance(rag_output, dict) else {}
-
-            regex_conf = regex_field.get("confidence", 0.0) if isinstance(regex_field, dict) else 0.0
-            rag_conf = rag_field.get("confidence", 0.0) if isinstance(rag_field, dict) else (0.0 if rag_field in (None, {}) else 0.8)
-
-            field_level[field_name] = {
-                "regex": {
-                    "value": result.regex_value,
-                    "confidence": regex_conf,
-                    "source": result.regex_source,
-                },
-                "rag": {
-                    "value": result.rag_value,
-                    "confidence": rag_conf,
-                    "source": result.rag_source,
-                },
-                "final": {
-                    "value": result.final_value,
-                    "confidence": result.confidence,
-                    "state": result.state,
-                    "notes": result.notes,
-                    "similarity": result.similarity,
-                },
+        # Build arbitration_results in desired format for API response
+        arbitration_results_formatted = {
+            field_name: {
+                "field_name": result.field_name,
+                "final_value": result.final_value,
+                "state": result.state,
+                "confidence": result.confidence,
+                "regex_value": result.regex_value,
+                "rag_value": result.rag_value,
+                "regex_source": result.regex_source,
+                "rag_source": result.rag_source,
+                "notes": result.notes,
             }
+            for field_name, result in arbitration_results.items()
+        }
 
         return {
             "status": "success",
             "document_id": document_id,
-            "filename": file.filename,
-            "message": "Extraction complete. Awaiting human verification.",
-            "verification_endpoint": f"/api/verify/{document_id}",
+            "arbitration_results": arbitration_results_formatted,
+            "arbitration_summary": arbitration_summary,
             "regex_output": regex_output,
             "rag_output": rag_output,
-            "field_level": field_level,
-            "arbitration_summary": arbitration_summary,
-            "fields_requiring_review": [
-                field_name for field_name, result in arbitration_results.items() if result.state == "mismatch"
-            ],
+            "verification_status": "pending_human_review",
+            "created_at": datetime.utcnow().isoformat(),
         }
     finally:
         rag_service.delete_document_data(document_id)
