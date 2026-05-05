@@ -1,0 +1,6 @@
+{
+  "/api/upload/route": "app/api/upload/route.js",
+  "/api/verification/[docId]/route": "app/api/verification/[docId]/route.js",
+  "/page": "app/page.js",
+  "/review/[docId]/page": "app/review/[docId]/page.js"
+}

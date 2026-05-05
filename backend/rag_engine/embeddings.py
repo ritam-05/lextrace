@@ -54,7 +54,7 @@ class RAGService:
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
             gc.collect()
-        print("🧹 Chunk encoding complete. VRAM aggressively flushed and garbage collected.")
+        print(" Chunk encoding complete. VRAM aggressively flushed and garbage collected.")
 
         # 5. MongoDB Ingestion (System RAM -> Network)
         print("Pushing vectors and text to MongoDB Atlas...")

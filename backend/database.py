@@ -16,7 +16,7 @@ class Database:
     def connect(cls):
         if cls.client is None:
             if not MONGO_URI:
-                raise ValueError("❌ MONGO_URI is not set in the .env file.")
+                raise ValueError(" MONGO_URI is not set in the .env file.")
             
             # ServerApi('1') is highly recommended for MongoDB Atlas stability
             cls.client = MongoClient(MONGO_URI, server_api=ServerApi('1'))
@@ -24,9 +24,9 @@ class Database:
             try:
                 # Force a call to the server to verify the connection
                 cls.client.admin.command('ping')
-                print("✅ Successfully connected to MongoDB Atlas Free Tier!")
+                print(" Successfully connected to MongoDB Atlas Free Tier!")
             except Exception as e:
-                print(f"❌ Failed to connect to MongoDB: {e}")
+                print(f" Failed to connect to MongoDB: {e}")
                 raise e
             
             # Using 'lextrace_db' as the default database name
@@ -42,4 +42,4 @@ class Database:
     def close(cls):
         if cls.client:
             cls.client.close()
-            print("🔌 MongoDB Atlas connection safely closed.")
+            print(" MongoDB Atlas connection safely closed.")

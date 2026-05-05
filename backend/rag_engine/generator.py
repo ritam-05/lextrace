@@ -11,7 +11,7 @@ class ActionPlanGenerator:
     def __init__(self):
         api_key = os.getenv("GROQ_API_KEY")
         if not api_key:
-            raise ValueError("❌ GROQ_API_KEY missing from .env file.")
+            raise ValueError(" GROQ_API_KEY missing from .env file.")
 
         self.client = Groq(api_key=api_key)
         self.model = "llama-3.1-8b-instant"
@@ -53,7 +53,7 @@ class ActionPlanGenerator:
         }}
         """
 
-        print("🧠 Transmitting context to Groq LLM for comprehensive extraction...")
+        print(" Transmitting context to Groq LLM for comprehensive extraction...")
 
         try:
             response = self.client.chat.completions.create(
@@ -64,11 +64,11 @@ class ActionPlanGenerator:
             )
 
             result = json.loads(response.choices[0].message.content)
-            print("✅ Successfully generated comprehensive extraction with action plan.")
+            print(" Successfully generated comprehensive extraction with action plan.")
             return result
 
         except json.JSONDecodeError:
-            print("❌ LLM failed to output valid JSON. Falling back to empty schema.")
+            print(" LLM failed to output valid JSON. Falling back to empty schema.")
             return {
                 "directives": ["Error parsing LLM output"], 
                 "responsible_departments": [], 
@@ -76,5 +76,5 @@ class ActionPlanGenerator:
                 "status": "failed_generation"
             }
         except Exception as e:
-            print(f"❌ Groq API Error: {e}")
+            print(f" Groq API Error: {e}")
             raise e

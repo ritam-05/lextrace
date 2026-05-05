@@ -75,7 +75,7 @@ async def process_judgment(file: UploadFile = File(...)):
         operative_section = None
 
     try:
-        print("\n🔄 Starting parallel extraction (Regex + RAG)...")
+        print("\n Starting parallel extraction (Regex + RAG)...")
 
         def run_regex_extraction():
             try:
@@ -130,7 +130,7 @@ async def process_judgment(file: UploadFile = File(...)):
         arbitration_results = arbitrator.arbitrate_all(regex_output, rag_output)
         arbitration_summary = arbitrator.generate_arbitration_summary(arbitration_results)
 
-        print("  ✅ Arbitration Complete:")
+        print("   Arbitration Complete:")
         print(f"     - Dual-Verified: {arbitration_summary['dual_verified_count']}")
         print(f"     - Mismatches: {arbitration_summary['mismatch_count']}")
         print(f"     - Single-Source: {arbitration_summary['single_source_count']}")
@@ -165,9 +165,9 @@ async def process_judgment(file: UploadFile = File(...)):
             }
 
             db.extractions.insert_one(extraction_record)
-            print("✅ Extraction and arbitration results saved to MongoDB")
+            print(" Extraction and arbitration results saved to MongoDB")
         except Exception as e:
-            print(f"❌ Failed to save to MongoDB: {e}")
+            print(f" Failed to save to MongoDB: {e}")
 
         # Build arbitration_results in desired format for API response
         arbitration_results_formatted = {

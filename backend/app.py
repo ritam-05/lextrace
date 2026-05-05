@@ -11,40 +11,36 @@ from backend.state import ml_models
 from backend.routes.rag_test import router as upload_router
 from backend.routes.verification import router as verification_router
 
-
-
-
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # --- STARTUP SEQUENCE ---
-    print("🚀 Starting LexTrace Backend...")
+    print("Starting LexTrace Backend...")
     
     # 1. Initialize MongoDB Connection
     Database.connect()
 
     # 2. Load BGE Model into VRAM
-    print("🧠 Loading BAAI/bge-large-en-v1.5 into VRAM...")
+    print("Loading BAAI/bge-large-en-v1.5 into VRAM...")
     try:
         # Strictly enforce CUDA constraint for the RTX 2050
         device = "cuda" if torch.cuda.is_available() else "cpu"
         if device == "cpu":
-            print("⚠️ FATAL WARNING: CUDA not detected. Model is running on CPU. This violates the hardware constraints.")
+            print("FATAL WARNING: CUDA not detected. Model is running on CPU. This violates the hardware constraints.")
         
         # Load the model directly to the target device
         model = SentenceTransformer("BAAI/bge-large-en-v1.5", device=device)
         ml_models["bge"] = model
-        print(f"✅ BGE Model loaded successfully on {device}!")
+        print(f"BGE Model loaded successfully on {device}!")
         
     except Exception as e:
-        print(f"❌ Failed to load embedding model: {e}")
+        print(f"Failed to load embedding model: {e}")
         raise e
 
     # Yield control to the FastAPI application
     yield 
 
     # --- SHUTDOWN SEQUENCE ---
-    print("🛑 Shutting down LexTrace Backend...")
+    print("Shutting down LexTrace Backend...")
     
     # 1. Close Database Connections
     Database.close()
@@ -54,7 +50,7 @@ async def lifespan(app: FastAPI):
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
         gc.collect()
-    print("🧹 VRAM explicitly cleared and garbage collected.")
+    print("VRAM explicitly cleared and garbage collected.")
 
 # Initialize the FastAPI app with the lifespan context
 app = FastAPI(lifespan=lifespan, title="LexTrace Core API")
