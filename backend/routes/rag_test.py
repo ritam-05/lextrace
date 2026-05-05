@@ -149,6 +149,7 @@ async def process_judgment(file: UploadFile = File(...)):
                         "final_value": result.final_value,
                         "state": result.state,
                         "confidence": result.confidence,
+                        "similarity": result.similarity,
                         "regex_value": result.regex_value,
                         "rag_value": result.rag_value,
                         "regex_source": result.regex_source,
@@ -192,6 +193,7 @@ async def process_judgment(file: UploadFile = File(...)):
                     "confidence": result.confidence,
                     "state": result.state,
                     "notes": result.notes,
+                    "similarity": result.similarity,
                 },
             }
 

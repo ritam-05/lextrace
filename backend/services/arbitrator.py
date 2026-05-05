@@ -29,7 +29,7 @@ class ArbitrationResult:
     regex_source: Optional[Dict[str, Any]] = None
     rag_source: Optional[Dict[str, Any]] = None
     notes: str = ""
-
+    similarity: float = 0.0
 
 class Arbitrator:
     """
@@ -117,43 +117,47 @@ class Arbitrator:
             rag_value = None
             rag_confidence = 0.0
         
-        # Both sources found the field
+        # Compute similarity when both sources present
+        similarity = 0.0
         if regex_value and rag_value:
             similarity = self.similarity_score(regex_value, rag_value)
-            
+
+            avg_source_conf = (regex_confidence + rag_confidence) / 2.0
+            # Scale final confidence by similarity: multiplier in [0.5, 1.0]
+            final_confidence = round(avg_source_conf * (0.5 + 0.5 * similarity), 2)
+
             if similarity >= 0.9:
-                # Dual-verified: Strong agreement
-                final_value = regex_value  # Prefer Regex (deterministic)
-                state = "dual_verified"
-                confidence = 0.95
-                notes = "Both sources agree with high confidence."
-            elif similarity >= 0.7:
-                # Partial match: Minor differences
                 final_value = regex_value
                 state = "dual_verified"
-                confidence = 0.85
+                confidence = final_confidence
+                notes = "Both sources agree with high similarity."
+            elif similarity >= 0.7:
+                final_value = regex_value
+                state = "dual_verified"
+                confidence = final_confidence
                 notes = f"Both sources match with {similarity:.1%} similarity."
             else:
-                # Mismatch: Conflicting values
-                final_value = regex_value  # Prefer Regex for review
+                final_value = regex_value
                 state = "mismatch"
-                confidence = 0.5
+                confidence = final_confidence
                 notes = f"Conflicting values detected. Similarity: {similarity:.1%}. Requires human review."
-        
+
         # Only Regex found the field
         elif regex_value:
+            similarity = 0.0
             final_value = regex_value
             state = "single_source_regex"
-            confidence = 0.70
+            confidence = round(regex_confidence * 0.75, 2)
             notes = "Extracted by Regex only."
-        
+
         # Only RAG found the field
         elif rag_value:
+            similarity = 0.0
             final_value = rag_value
             state = "single_source_rag"
-            confidence = 0.75
+            confidence = round(rag_confidence * 0.75, 2)
             notes = "Extracted by RAG (semantic) only."
-        
+
         # Neither found it
         else:
             final_value = None
@@ -195,6 +199,7 @@ class Arbitrator:
             regex_source=regex_source,
             rag_source=rag_source,
             notes=notes
+            , similarity=round(similarity, 2)
         )
     
     def arbitrate_all(
@@ -236,8 +241,17 @@ class Arbitrator:
         single_source = sum(1 for r in arbitration_results.values() if "single_source" in r.state)
         not_found = sum(1 for r in arbitration_results.values() if r.state == "not_found")
         
-        avg_confidence = sum(r.confidence for r in arbitration_results.values()) / len(arbitration_results) if arbitration_results else 0.0
-        
+        avg_confidence = (
+            sum(r.confidence for r in arbitration_results.values()) / len(arbitration_results)
+            if arbitration_results
+            else 0.0
+        )
+        avg_similarity = (
+            sum(r.similarity for r in arbitration_results.values()) / len(arbitration_results)
+            if arbitration_results
+            else 0.0
+        )
+
         return {
             "total_fields": len(arbitration_results),
             "dual_verified_count": dual_verified,
@@ -245,5 +259,6 @@ class Arbitrator:
             "single_source_count": single_source,
             "not_found_count": not_found,
             "average_confidence": round(avg_confidence, 2),
-            "requires_human_review": mismatches > 0
+            "average_similarity": round(avg_similarity, 2),
+            "requires_human_review": mismatches > 0,
         }
