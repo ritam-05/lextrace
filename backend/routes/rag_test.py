@@ -167,6 +167,34 @@ async def process_judgment(file: UploadFile = File(...)):
         except Exception as e:
             print(f"❌ Failed to save to MongoDB: {e}")
 
+        # Build per-field detailed view for API response
+        field_level: dict[str, dict] = {}
+        for field_name, result in arbitration_results.items():
+            regex_field = regex_output.get(field_name, {}) if isinstance(regex_output, dict) else {}
+            rag_field = rag_output.get(field_name, {}) if isinstance(rag_output, dict) else {}
+
+            regex_conf = regex_field.get("confidence", 0.0) if isinstance(regex_field, dict) else 0.0
+            rag_conf = rag_field.get("confidence", 0.0) if isinstance(rag_field, dict) else (0.0 if rag_field in (None, {}) else 0.8)
+
+            field_level[field_name] = {
+                "regex": {
+                    "value": result.regex_value,
+                    "confidence": regex_conf,
+                    "source": result.regex_source,
+                },
+                "rag": {
+                    "value": result.rag_value,
+                    "confidence": rag_conf,
+                    "source": result.rag_source,
+                },
+                "final": {
+                    "value": result.final_value,
+                    "confidence": result.confidence,
+                    "state": result.state,
+                    "notes": result.notes,
+                },
+            }
+
         return {
             "status": "success",
             "document_id": document_id,
@@ -175,6 +203,7 @@ async def process_judgment(file: UploadFile = File(...)):
             "verification_endpoint": f"/api/verify/{document_id}",
             "regex_output": regex_output,
             "rag_output": rag_output,
+            "field_level": field_level,
             "arbitration_summary": arbitration_summary,
             "fields_requiring_review": [
                 field_name for field_name, result in arbitration_results.items() if result.state == "mismatch"
