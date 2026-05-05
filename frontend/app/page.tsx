@@ -1,0 +1,76 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import UploadCard from "@/components/upload/UploadCard";
+
+export default function HomePage() {
+  const router = useRouter();
+  const [uploadError, setUploadError] = useState<string | null>(null);
+
+  useEffect(() => {
+    window.sessionStorage.removeItem("lextrace_session");
+    window.sessionStorage.removeItem("lextrace_pdf_file");
+  }, []);
+
+  useEffect(() => {
+    if (!uploadError) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setUploadError(null);
+    }, 5_000);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [uploadError]);
+
+  return (
+    <main className="min-h-screen flex flex-col bg-slate-50">
+      <section className="pt-16 pb-8 px-4">
+        <div className="mx-auto w-full max-w-4xl text-center">
+          <h1 className="text-3xl font-bold tracking-tight text-slate-900 font-[family-name:var(--font-geist-sans)]">
+            LeXTrace
+          </h1>
+          <p className="text-slate-500 text-sm mt-1">
+            Legal Judgment Review System
+          </p>
+          <div className="mt-6 border-t border-slate-200" />
+        </div>
+      </section>
+
+      <section className="flex-1 flex items-start justify-center px-4 pt-8">
+        <div className="w-full max-w-xl">
+          {uploadError ? (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4 text-red-700 text-sm flex items-start justify-between gap-3">
+              <span>{uploadError}</span>
+              <button
+                type="button"
+                onClick={() => setUploadError(null)}
+                className="shrink-0 text-red-500 hover:text-red-700 transition-colors"
+                aria-label="Dismiss error"
+              >
+                X
+              </button>
+            </div>
+          ) : null}
+
+          <div className="w-full max-w-xl bg-white rounded-2xl shadow-sm border border-slate-200 p-8">
+            <UploadCard
+              onUploadSuccess={(docId) => {
+                router.push(`/review/${docId}`);
+              }}
+              onUploadError={(msg) => setUploadError(msg)}
+            />
+          </div>
+        </div>
+      </section>
+
+      <footer className="fixed bottom-0 left-0 right-0 text-center text-xs text-slate-400 py-3 bg-slate-50 border-t border-slate-100">
+        For official government use only · LeXTrace MVP
+      </footer>
+    </main>
+  );
+}

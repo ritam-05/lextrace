@@ -1,0 +1,63 @@
+@import "tailwindcss";
+
+:root {
+  --font-geist-sans: "Geist Sans", sans-serif;
+  --font-geist-mono: "Geist Mono", monospace;
+
+  --confidence-high: #22c55e;
+  --confidence-medium: #f59e0b;
+  --confidence-low: #ef4444;
+  --confidence-high-bg: #22c55e1a;
+  --confidence-medium-bg: #f59e0b1a;
+  --confidence-low-bg: #ef44441a;
+}
+
+html,
+body {
+  height: 100%;
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.confidence-highlight {
+  position: absolute;
+  border-radius: 3px;
+  transition: box-shadow 150ms ease, opacity 150ms ease;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.confidence-highlight.active {
+  box-shadow: 0 0 0 2px white, 0 0 0 4px currentColor;
+  opacity: 1 !important;
+  z-index: 20;
+}
+
+.confidence-highlight:not(.active) {
+  opacity: 0.45;
+}
+
+.confidence-highlight:hover:not(.active) {
+  opacity: 0.7;
+}
+
+@keyframes page-enter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.pdf-page-wrapper {
+  animation: page-enter 200ms ease forwards;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #94a3b8 transparent;
+}
