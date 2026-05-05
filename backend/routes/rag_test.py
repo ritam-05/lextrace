@@ -1,6 +1,7 @@
 import asyncio
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 
 import fitz  # PyMuPDF
 from fastapi import APIRouter, File, HTTPException, UploadFile
@@ -63,9 +64,9 @@ async def process_judgment(file: UploadFile = File(...)):
             else raw_text
         )
 
-        print(f"✅ Operative section isolated: {operative_section.marker_matched}")
+        print(f"Operative section isolated: {operative_section.marker_matched}")
     except Exception as e:
-        print(f"⚠️ Could not isolate operative section: {e}. Using full text.")
+        print(f"Could not isolate operative section: {e}. Using full text.")
         from backend.services.utils import PageText
 
         pages = [PageText(page=i + 1, text=text) for i, text in enumerate(pages_text)]
@@ -81,10 +82,10 @@ async def process_judgment(file: UploadFile = File(...)):
                 print("  [REGEX] Starting metadata extraction...")
                 zone_extractor = ZoneExtractor([paragraph.to_dict() for paragraph in paragraphs])
                 regex_output = zone_extractor.extract_all()
-                print("  [REGEX] ✅ Completed metadata extraction")
+                print("  [REGEX] Completed metadata extraction")
                 return regex_output
             except Exception as e:
-                print(f"  [REGEX] ❌ Extraction failed: {e}")
+                print(f"  [REGEX] Extraction failed: {e}")
                 return {}
 
         async def run_rag_extraction():
@@ -114,10 +115,10 @@ async def process_judgment(file: UploadFile = File(...)):
                     raise Exception("Failed to retrieve context")
 
                 rag_output = generator.generate(context=retrieved_context, hard_facts={})
-                print("  [RAG] ✅ Completed semantic extraction with LLM")
+                print("  [RAG] Completed semantic extraction with LLM")
                 return rag_output
             except Exception as e:
-                print(f"  [RAG] ❌ Extraction failed: {e}")
+                print(f"  [RAG] Extraction failed: {e}")
                 return {}
 
         regex_output, rag_output = await asyncio.gather(
@@ -125,7 +126,7 @@ async def process_judgment(file: UploadFile = File(...)):
             run_rag_extraction(),
         )
 
-        print("\n⚖️ Starting arbitration...")
+        print("\nStarting arbitration...")
         arbitration_results = arbitrator.arbitrate_all(regex_output, rag_output)
         arbitration_summary = arbitrator.generate_arbitration_summary(arbitration_results)
 
@@ -160,7 +161,7 @@ async def process_judgment(file: UploadFile = File(...)):
                 },
                 "arbitration_summary": arbitration_summary,
                 "status": "pending_human_review",
-                "created_at": datetime.utcnow().isoformat(),
+                "created_at": datetime.now(ZoneInfo("Asia/Kolkata")).isoformat(),
             }
 
             db.extractions.insert_one(extraction_record)
@@ -192,7 +193,7 @@ async def process_judgment(file: UploadFile = File(...)):
             "regex_output": regex_output,
             "rag_output": rag_output,
             "verification_status": "pending_human_review",
-            "created_at": datetime.utcnow().isoformat(),
+            "created_at": datetime.now(ZoneInfo("Asia/Kolkata")).isoformat(),
         }
     finally:
         rag_service.delete_document_data(document_id)
