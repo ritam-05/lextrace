@@ -48,8 +48,8 @@ async def process_judgment(file: UploadFile = File(...)):
 
         print(f"Extracted {len(raw_text)} characters of raw text.")
 
-        header_chunk = raw_text[:250]
-        print(" [LLM] Extracting basic metadata from the first 150 characters...")
+        header_chunk = raw_text[:1250]
+        print(" [LLM] Extracting basic metadata from the first 1000 characters...")
         header_metadata = generator.extract_basic_metadata(header_chunk)
         print(f" [LLM] Header Metadata: {header_metadata}")
 
