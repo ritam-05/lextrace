@@ -14,6 +14,7 @@ from backend.services.arbitrator import Arbitrator
 from backend.services.operative_isolator import isolate_operative_section
 from backend.services.paragraph_segmenter import segment_pages_into_paragraphs
 from backend.services.zone_extractor import ZoneExtractor
+from backend.services.appeal_scorer import AppealScorer
 
 router = APIRouter()
 
@@ -46,6 +47,12 @@ async def process_judgment(file: UploadFile = File(...)):
             raise HTTPException(status_code=400, detail="Could not extract readable text from the PDF. It may be a scanned image requiring OCR.")
 
         print(f"Extracted {len(raw_text)} characters of raw text.")
+
+        header_chunk = raw_text[:1250]
+        print(" [LLM] Extracting basic metadata from the first 1000 characters...")
+        header_metadata = generator.extract_basic_metadata(header_chunk)
+        print(f" [LLM] Header Metadata: {header_metadata}")
+
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"PDF Parsing Failed: {str(e)}")
 
@@ -115,6 +122,26 @@ async def process_judgment(file: UploadFile = File(...)):
                     raise Exception("Failed to retrieve context")
 
                 rag_output = generator.generate(context=retrieved_context, hard_facts={})
+                
+                # --- NEW HYBRID APPEAL LOGIC ---
+                if "Appeal_Risk_Signals" in rag_output:
+                    print("  [RAG] Calculating deterministic appeal score...")
+                    appeal_evaluation = AppealScorer.evaluate(rag_output["Appeal_Risk_Signals"])
+                    
+                    # Ensure Action_Plan exists to avoid KeyError
+                    if "Action_Plan" not in rag_output:
+                        rag_output["Action_Plan"] = {}
+                        
+                    # Inject the computed result directly into the Action Plan
+                    rag_output["Action_Plan"]["Consideration_for_Appeal"] = appeal_evaluation["appeal_consideration"]
+                    rag_output["Action_Plan"]["Appeal_Justification"] = appeal_evaluation["reasons"]
+                    rag_output["Action_Plan"]["Appeal_Risk_Score"] = appeal_evaluation["score"]
+                    rag_output["Action_Plan"]["LLM_Context"] = appeal_evaluation["llm_summary"]
+                    
+                    # Clean up the raw signals so the frontend and database only see the processed result
+                    del rag_output["Appeal_Risk_Signals"]
+                # --------------------------------
+
                 print("  [RAG] Completed semantic extraction with LLM")
                 return rag_output
             except Exception as e:
@@ -142,6 +169,7 @@ async def process_judgment(file: UploadFile = File(...)):
                 "document_id": document_id,
                 "filename": file.filename,
                 "extraction_type": "arbitration_result",
+                "header_metadata": header_metadata,
                 "regex_output": regex_output,
                 "rag_output": rag_output,
                 "arbitration_results": {
@@ -188,6 +216,7 @@ async def process_judgment(file: UploadFile = File(...)):
         return {
             "status": "success",
             "document_id": document_id,
+            "header_metadata": header_metadata,
             "arbitration_results": arbitration_results_formatted,
             "arbitration_summary": arbitration_summary,
             "regex_output": regex_output,
