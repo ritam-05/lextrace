@@ -57,15 +57,6 @@ function deriveReviewFields(uploadResponse: UploadResponse): ReviewField[] {
       review_status: "unreviewed",
     },
     {
-      fieldId: "court_name",
-      label: "Court Name",
-      value: zones.court_name,
-      confidence: defaultConfidence,
-      source_page: defaultPage,
-      source_bbox: null,
-      review_status: "unreviewed",
-    },
-    {
       fieldId: "bench",
       label: "Bench",
       value: zones.bench.length > 0 ? zones.bench.join(", ") : null,

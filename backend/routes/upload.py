@@ -13,11 +13,13 @@ from backend.services.utils import (
     PasswordProtectedPDFError,
     logger,
 )
+from backend.rag_engine.generator import ActionPlanGenerator
 
 
 router = APIRouter()
 
 MAX_UPLOAD_SIZE_BYTES = 20 * 1024 * 1024
+generator = ActionPlanGenerator()
 
 
 def _validate_pdf_upload(file: UploadFile, payload: bytes) -> None:
@@ -89,6 +91,12 @@ async def upload_pdf(file: UploadFile = File(...)) -> dict:
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=f"OCR fallback failed: {exc}",
         ) from exc
+    except Exception as exc:
+        logger.error("Extraction failed for doc_id=%s: %s", doc_id, str(exc))
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Document extraction failed: {str(exc)}",
+        ) from exc
 
     logger.info(
         "text_extraction_summary doc_id=%s ocr_used=%s page_count=%s para_count=%s operative_detected=%s marker=%s",
@@ -102,9 +110,19 @@ async def upload_pdf(file: UploadFile = File(...)) -> dict:
 
     full_text = "\n\n".join(page.text for page in pages if page.text.strip())
 
+    # Extract header metadata for frontend use
+    header_metadata = {}
+    try:
+        header_chunk = full_text[:1000]
+        header_metadata = generator.extract_basic_metadata(header_chunk)
+    except Exception as exc:
+        logger.warning("Header metadata extraction failed: %s", str(exc))
+        # Continue without header metadata, use empty dict
+
     return {
         "doc_id": doc_id,
         "ocr_used": ocr_used,
+        "header_metadata": header_metadata,
         "stats": {
             "page_count": page_count,
             "paragraph_count": len(paragraphs),

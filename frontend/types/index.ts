@@ -47,7 +47,6 @@ export interface ExtractedZones {
   /** Parsed judgment or order date as a display string, if available. */
   judgment_date: string | null;
   /** Parsed court name from the judgment header, if available. */
-  court_name: string | null;
   /** Parsed bench or judge names associated with the judgment. */
   bench: string[];
   /** Parsed petitioner name or party title, if available. */

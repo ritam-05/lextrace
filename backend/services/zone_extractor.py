@@ -180,7 +180,6 @@ class BaseExtractor:
             "case_type": self.extract_case_type(case_number.get("value")),
             "judgment_date": self.extract_judgment_date(),
             "bench": self.extract_bench(),
-            "court_name": self.extract_court_name(),
             "petitioner": parties["petitioner"],
             "respondent": parties["respondent"],
         }
@@ -191,9 +190,6 @@ class BaseExtractor:
             fields["case_number"] = self._empty_field()
         if "COURT" in fields["bench"].get("value", "").upper():
             fields["bench"] = self._empty_field()
-        if re.search(r"\bNO\.?\b", fields["court_name"].get("value", ""), re.IGNORECASE):
-            fields["court_name"] = self._empty_field()
-
         values = {
             key: self._normalize_text(value["value"])
             for key, value in fields.items()
@@ -1099,12 +1095,7 @@ class SupremeCourtExtractor(BaseExtractor):
         return super().extract_case_type(case_number)
 
     def extract_court_name(self) -> dict[str, Any]:
-        source = self._first_indicator_paragraph(("S.C.R.", "SUPREME COURT REPORTS", "SUPREME COURT"))
-        if not source:
-            source = self.paragraphs[0] if self.paragraphs else None
-        if not source:
-            return self._empty_field()
-        return {"value": "SUPREME COURT OF INDIA", "source": source.source}
+        return self._empty_field()
 
     def extract_bench(self) -> dict[str, Any]:
         candidates: list[SpanCandidate] = []
@@ -1304,7 +1295,6 @@ class CalcuttaHCExtractor(BaseExtractor):
             "case_type": self.extract_case_type(case_number.get("value")),
             "judgment_date": self.extract_judgment_date(),
             "bench": self.extract_bench(),
-            "court_name": self.extract_court_name(),
             "petitioner": parties["petitioner"],
             "respondent": parties["respondent"],
         }
@@ -1543,7 +1533,7 @@ class UnifiedExtractor(BaseExtractor):
     def validate_fields(self, fields: dict[str, Any]) -> dict[str, Any]:
         fields = super().validate_fields(fields)
         header_indexes = {paragraph.index for paragraph in self.header_zone}
-        for key in ("case_number", "judgment_date", "bench", "court_name", "petitioner", "respondent"):
+        for key in ("case_number", "judgment_date", "bench", "petitioner", "respondent"):
             value = fields.get(key, {})
             if not isinstance(value, dict) or not value.get("value"):
                 continue
@@ -1552,7 +1542,7 @@ class UnifiedExtractor(BaseExtractor):
             if not self._source_in_header_zone(source_page, source_text, header_indexes):
                 fields[key] = self._empty_field()
 
-        for key in ("case_number", "judgment_date", "bench", "court_name", "petitioner", "respondent"):
+        for key in ("case_number", "judgment_date", "bench", "petitioner", "respondent"):
             value = fields.get(key, {})
             if isinstance(value, dict) and len(value.get("value", "")) > 180:
                 fields[key] = self._empty_field()
@@ -1563,10 +1553,6 @@ class UnifiedExtractor(BaseExtractor):
         date_value = fields.get("judgment_date", {}).get("value", "")
         if case_number and date_value and self._date_year_mismatches_case_year(case_number, date_value):
             fields["judgment_date"] = self._empty_field()
-
-        court_name = fields.get("court_name", {}).get("value", "")
-        if court_name and not re.search(r"\b(?:HIGH|SUPREME)\s+COURT\b", court_name, re.IGNORECASE):
-            fields["court_name"] = self._empty_field()
 
         if re.search(r"\bNO\.?\b", fields.get("petitioner", {}).get("value", ""), re.IGNORECASE):
             fields["petitioner"] = self._empty_field()
@@ -1863,7 +1849,7 @@ class RobustExtractor(UnifiedExtractor):
         return {"petitioner": self._empty_field(), "respondent": self._empty_field()}
 
     def validate_fields(self, fields: dict[str, Any]) -> dict[str, Any]:
-        for key in ("case_number", "judgment_date", "bench", "court_name", "petitioner", "respondent"):
+        for key in ("case_number", "judgment_date", "bench", "petitioner", "respondent"):
             value = fields.get(key, {})
             if isinstance(value, dict) and value.get("value") and len(value["value"]) > 220:
                 value["value"] = value["value"][:220].strip(" ,.;:")
@@ -1873,11 +1859,10 @@ class RobustExtractor(UnifiedExtractor):
         fields = super().extract_all()
         if not any(
             fields[key]["value"]
-            for key in ("case_number", "judgment_date", "bench", "court_name", "petitioner", "respondent")
+            for key in ("case_number", "judgment_date", "bench", "petitioner", "respondent")
         ):
-            fallback = self._best_text_fallback()
-            if fallback:
-                fields["court_name"] = self._field(fallback)
+            # Court name is intentionally disabled as a field, so do not fill it here.
+            pass
         return fields
 
     def _zone_order(self) -> list[tuple[str, list[ZoneParagraph]]]:
