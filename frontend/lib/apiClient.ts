@@ -11,7 +11,7 @@ interface UploadProxyResponse {
   uploadResponse: UploadResponse;
 }
 
-const REQUEST_TIMEOUT_MS = 30_000;
+const REQUEST_TIMEOUT_MS = 300_000;
 
 async function parseError(response: Response): Promise<ApiError> {
   try {
@@ -62,7 +62,7 @@ async function request<T>(
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") {
       throw {
-        message: "Request timed out after 30 seconds",
+        message: "Request timed out after 5 minutes",
         status: 408,
       } satisfies ApiError;
     }

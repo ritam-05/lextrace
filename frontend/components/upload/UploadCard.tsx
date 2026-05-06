@@ -22,6 +22,23 @@ interface SessionPayload {
 
 const MAX_FILE_SIZE_BYTES = 52_428_800;
 
+function getUploadErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "message" in error &&
+    typeof (error as { message?: unknown }).message === "string"
+  ) {
+    return (error as { message: string }).message;
+  }
+
+  return "The judgment could not be processed at this time.";
+}
+
 async function fileToBase64(file: File): Promise<string> {
   return await new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -142,10 +159,7 @@ export default function UploadCard({
       }, 600);
     } catch (errorCaught) {
       clearTimers();
-      const message =
-        errorCaught instanceof Error
-          ? errorCaught.message
-          : "The judgment could not be processed at this time.";
+      const message = getUploadErrorMessage(errorCaught);
 
       setIsProcessing(false);
       setCurrentStep(1);

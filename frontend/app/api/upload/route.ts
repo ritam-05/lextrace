@@ -8,7 +8,9 @@ import type {
 const FASTAPI_BASE_URL = (
   process.env.FASTAPI_BASE_URL ?? "http://localhost:8000"
 ).replace(/\/+$/, "");
-const REQUEST_TIMEOUT_MS = 60_000;
+const REQUEST_TIMEOUT_MS = 300_000;
+
+export const maxDuration = 300;
 
 interface UploadRouteError {
   error: string;
@@ -461,7 +463,7 @@ export async function POST(request: Request): Promise<Response> {
     return NextResponse.json(combinedResponse, { status: 200 });
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") {
-      return toErrorResponse("Upload processing timed out after 60 seconds", 504);
+      return toErrorResponse("Upload processing timed out after 5 minutes", 504);
     }
 
     const message =
