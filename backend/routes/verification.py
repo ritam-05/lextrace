@@ -37,6 +37,7 @@ async def get_verification(doc_id: str):
         return {
             "status": "success",
             "document_id": doc_id,
+            "header_metadata": extraction.get("header_metadata", {}),
             "arbitration_results": extraction.get("arbitration_results", {}),
             "arbitration_summary": extraction.get("arbitration_summary", {}),
             "regex_output": extraction.get("regex_output", {}),

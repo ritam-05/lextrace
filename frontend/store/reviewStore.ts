@@ -1,22 +1,28 @@
 "use client";
 
 import { create } from "zustand";
-import type { ActionPlanItem, ReviewField } from "@/types";
+import type { ActionPlan, ReviewField } from "@/types";
 
 interface ReviewStore {
   fields: Record<string, ReviewField>;
-  actionItems: Record<string, ActionPlanItem>;
+  actionPlan: ActionPlan | null;
   activeFieldId: string | null;
   isSubmitting: boolean;
   initFields: (fields: ReviewField[]) => void;
-  initActionItems: (items: ActionPlanItem[]) => void;
+  initActionPlan: (plan: ActionPlan) => void;
   setActiveField: (id: string | null) => void;
   approveField: (fieldId: string) => void;
   editField: (fieldId: string, newValue: string) => void;
   rejectField: (fieldId: string) => void;
-  approveActionItem: (itemId: string) => void;
-  editActionItem: (itemId: string, newDirective: string) => void;
-  rejectActionItem: (itemId: string) => void;
+  approveDirection: (id: string) => void;
+  editDirection: (id: string, newText: string) => void;
+  rejectDirection: (id: string) => void;
+  approveComplianceStep: (id: string) => void;
+  editComplianceStep: (id: string, newText: string) => void;
+  rejectComplianceStep: (id: string) => void;
+  approveTimeline: (id: string) => void;
+  editTimeline: (id: string, newText: string) => void;
+  rejectTimeline: (id: string) => void;
   setSubmitting: (val: boolean) => void;
   totalFields: () => number;
   totalCount: () => number;
@@ -25,9 +31,33 @@ interface ReviewStore {
   flaggedFields: () => ReviewField[];
 }
 
+function countReviewed(plan: ActionPlan | null): number {
+  if (!plan) {
+    return 0;
+  }
+
+  return [
+    ...plan.key_directions,
+    ...plan.compliance_steps,
+    ...plan.timelines,
+  ].filter((item) => item.review_status !== "unreviewed").length;
+}
+
+function countActionItems(plan: ActionPlan | null): number {
+  if (!plan) {
+    return 0;
+  }
+
+  return (
+    plan.key_directions.length +
+    plan.compliance_steps.length +
+    plan.timelines.length
+  );
+}
+
 export const useReviewStore = create<ReviewStore>((set, get) => ({
   fields: {},
-  actionItems: {},
+  actionPlan: null,
   activeFieldId: null,
   isSubmitting: false,
 
@@ -43,16 +73,8 @@ export const useReviewStore = create<ReviewStore>((set, get) => ({
     set({ fields: nextFields });
   },
 
-  initActionItems: (items) => {
-    const nextActionItems = items.reduce<Record<string, ActionPlanItem>>(
-      (accumulator, item) => {
-        accumulator[item.itemId] = item;
-        return accumulator;
-      },
-      {},
-    );
-
-    set({ actionItems: nextActionItems });
+  initActionPlan: (plan) => {
+    set({ actionPlan: plan });
   },
 
   setActiveField: (id) => {
@@ -120,62 +142,184 @@ export const useReviewStore = create<ReviewStore>((set, get) => ({
     });
   },
 
-  approveActionItem: (itemId) => {
+  approveDirection: (id) => {
     set((state) => {
-      const item = state.actionItems[itemId];
-
-      if (!item) {
+      if (!state.actionPlan) {
         return state;
       }
 
       return {
-        actionItems: {
-          ...state.actionItems,
-          [itemId]: {
-            ...item,
-            review_status: "approved",
-          },
+        actionPlan: {
+          ...state.actionPlan,
+          key_directions: state.actionPlan.key_directions.map((direction) =>
+            direction.id === id
+              ? { ...direction, review_status: "approved" }
+              : direction,
+          ),
         },
       };
     });
   },
 
-  editActionItem: (itemId, newDirective) => {
+  editDirection: (id, newText) => {
     set((state) => {
-      const item = state.actionItems[itemId];
-
-      if (!item) {
+      if (!state.actionPlan) {
         return state;
       }
 
       return {
-        actionItems: {
-          ...state.actionItems,
-          [itemId]: {
-            ...item,
-            review_status: "edited",
-            edited_directive: newDirective,
-          },
+        actionPlan: {
+          ...state.actionPlan,
+          key_directions: state.actionPlan.key_directions.map((direction) =>
+            direction.id === id
+              ? {
+                  ...direction,
+                  review_status: "edited",
+                  edited_text: newText,
+                }
+              : direction,
+          ),
         },
       };
     });
   },
 
-  rejectActionItem: (itemId) => {
+  rejectDirection: (id) => {
     set((state) => {
-      const item = state.actionItems[itemId];
-
-      if (!item) {
+      if (!state.actionPlan) {
         return state;
       }
 
       return {
-        actionItems: {
-          ...state.actionItems,
-          [itemId]: {
-            ...item,
-            review_status: "rejected",
-          },
+        actionPlan: {
+          ...state.actionPlan,
+          key_directions: state.actionPlan.key_directions.map((direction) =>
+            direction.id === id
+              ? { ...direction, review_status: "rejected" }
+              : direction,
+          ),
+        },
+      };
+    });
+  },
+
+  approveComplianceStep: (id) => {
+    set((state) => {
+      if (!state.actionPlan) {
+        return state;
+      }
+
+      return {
+        actionPlan: {
+          ...state.actionPlan,
+          compliance_steps: state.actionPlan.compliance_steps.map((step) =>
+            step.id === id
+              ? { ...step, review_status: "approved" }
+              : step,
+          ),
+        },
+      };
+    });
+  },
+
+  editComplianceStep: (id, newText) => {
+    set((state) => {
+      if (!state.actionPlan) {
+        return state;
+      }
+
+      return {
+        actionPlan: {
+          ...state.actionPlan,
+          compliance_steps: state.actionPlan.compliance_steps.map((step) =>
+            step.id === id
+              ? {
+                  ...step,
+                  review_status: "edited",
+                  edited_text: newText,
+                }
+              : step,
+          ),
+        },
+      };
+    });
+  },
+
+  rejectComplianceStep: (id) => {
+    set((state) => {
+      if (!state.actionPlan) {
+        return state;
+      }
+
+      return {
+        actionPlan: {
+          ...state.actionPlan,
+          compliance_steps: state.actionPlan.compliance_steps.map((step) =>
+            step.id === id
+              ? { ...step, review_status: "rejected" }
+              : step,
+          ),
+        },
+      };
+    });
+  },
+
+  approveTimeline: (id) => {
+    set((state) => {
+      if (!state.actionPlan) {
+        return state;
+      }
+
+      return {
+        actionPlan: {
+          ...state.actionPlan,
+          timelines: state.actionPlan.timelines.map((timeline) =>
+            timeline.id === id
+              ? { ...timeline, review_status: "approved" }
+              : timeline,
+          ),
+        },
+      };
+    });
+  },
+
+  editTimeline: (id, newText) => {
+    set((state) => {
+      if (!state.actionPlan) {
+        return state;
+      }
+
+      return {
+        actionPlan: {
+          ...state.actionPlan,
+          timelines: state.actionPlan.timelines.map((timeline) =>
+            timeline.id === id
+              ? {
+                  ...timeline,
+                  review_status: "edited",
+                  edited_text: newText,
+                }
+              : timeline,
+          ),
+        },
+      };
+    });
+  },
+
+  rejectTimeline: (id) => {
+    set((state) => {
+      if (!state.actionPlan) {
+        return state;
+      }
+
+      return {
+        actionPlan: {
+          ...state.actionPlan,
+          timelines: state.actionPlan.timelines.map((timeline) =>
+            timeline.id === id
+              ? { ...timeline, review_status: "rejected" }
+              : timeline,
+          ),
         },
       };
     });
@@ -191,9 +335,7 @@ export const useReviewStore = create<ReviewStore>((set, get) => ({
 
   totalCount: () => {
     const state = get();
-    return (
-      Object.keys(state.fields).length + Object.keys(state.actionItems).length
-    );
+    return Object.keys(state.fields).length + countActionItems(state.actionPlan);
   },
 
   verifiedCount: () => {
@@ -201,11 +343,8 @@ export const useReviewStore = create<ReviewStore>((set, get) => ({
     const verifiedFields = Object.values(state.fields).filter(
       (field) => field.review_status !== "unreviewed",
     ).length;
-    const verifiedActionItems = Object.values(state.actionItems).filter(
-      (item) => item.review_status !== "unreviewed",
-    ).length;
 
-    return verifiedFields + verifiedActionItems;
+    return verifiedFields + countReviewed(state.actionPlan);
   },
 
   allVerified: () => {

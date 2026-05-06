@@ -13,6 +13,7 @@ from backend.rag_engine.generator import ActionPlanGenerator
 from backend.services.arbitrator import Arbitrator
 from backend.services.operative_isolator import isolate_operative_section
 from backend.services.paragraph_segmenter import segment_pages_into_paragraphs
+from backend.services.regex_extractor import extract_case_type
 from backend.services.zone_extractor import ZoneExtractor
 from backend.services.appeal_scorer import AppealScorer
 
@@ -22,6 +23,33 @@ chunker = LegalDocumentChunker()
 rag_service = RAGService(batch_size=16)
 generator = ActionPlanGenerator()
 arbitrator = Arbitrator()
+
+
+def _is_missing_judge_name(value: object) -> bool:
+    if not isinstance(value, str):
+        return True
+
+    normalized = value.strip().lower()
+    return normalized in {"", "not specified", "error", "not available", "n/a", "na", "none", "null"}
+
+
+def _fallback_judge_name_from_last_page(paragraphs: list) -> str | None:
+    if not paragraphs:
+        return None
+
+    last_page = max(paragraph.page for paragraph in paragraphs)
+    last_page_paragraphs = [
+        paragraph.to_dict()
+        for paragraph in paragraphs
+        if paragraph.page == last_page
+    ]
+
+    if not last_page_paragraphs:
+        return None
+
+    bench_result = ZoneExtractor(last_page_paragraphs).extract_all().get("bench", {})
+    bench_value = bench_result.get("value")
+    return bench_value.strip() if isinstance(bench_value, str) and bench_value.strip() else None
 
 
 @router.post("/upload")
@@ -71,6 +99,12 @@ async def process_judgment(file: UploadFile = File(...)):
             else raw_text
         )
 
+        if _is_missing_judge_name(header_metadata.get("Name_of_the_judge")):
+            fallback_judge_name = _fallback_judge_name_from_last_page(paragraphs)
+            if fallback_judge_name:
+                header_metadata["Name_of_the_judge"] = fallback_judge_name
+                print(f" [REGEX] Judge name fallback from last page: {fallback_judge_name}")
+
         print(f"Operative section isolated: {operative_section.marker_matched}")
     except Exception as e:
         print(f"Could not isolate operative section: {e}. Using full text.")
@@ -89,6 +123,12 @@ async def process_judgment(file: UploadFile = File(...)):
                 print("  [REGEX] Starting metadata extraction...")
                 zone_extractor = ZoneExtractor([paragraph.to_dict() for paragraph in paragraphs])
                 regex_output = zone_extractor.extract_all()
+                case_number_result = regex_output.get("case_number") or {}
+                case_type_result = extract_case_type(
+                    case_number=case_number_result.get("value") or "",
+                    source_paragraph=case_number_result.get("source"),
+                )
+                regex_output["case_type"] = case_type_result
                 print("  [REGEX] Completed metadata extraction")
                 return regex_output
             except Exception as e:

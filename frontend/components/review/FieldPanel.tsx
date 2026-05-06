@@ -2,10 +2,10 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import ActionPlanPanel from "@/components/review/ActionPlanPanel";
 import FieldCard from "@/components/review/FieldCard";
 import ProgressBar from "@/components/review/ProgressBar";
 import { useReviewStore } from "@/store/reviewStore";
-import type { ActionPlanItem } from "@/types";
 
 interface FieldPanelProps {
   docId: string;
@@ -36,66 +36,8 @@ function formatTimestamp(value: string | null): string {
     " UTC";
 }
 
-function ActionPlanPanel({ items }: { items: ActionPlanItem[] }) {
-  const [isOpen, setIsOpen] = useState(true);
-
-  return (
-    <section className="rounded-3xl border border-slate-200 bg-slate-50/70">
-      <button
-        type="button"
-        onClick={() => {
-          setIsOpen((current) => !current);
-        }}
-        className="flex w-full items-center justify-between px-5 py-4 text-left"
-      >
-        <div>
-          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">
-            Action Plan
-          </p>
-          <p className="mt-1 text-xs text-slate-400">{items.length} items</p>
-        </div>
-        <span className="text-sm font-medium text-slate-600">
-          {isOpen ? "Hide" : "Show"}
-        </span>
-      </button>
-
-      {isOpen ? (
-        <div className="space-y-3 border-t border-slate-200 px-5 py-4">
-          {items.length > 0 ? (
-            items.map((item) => (
-              <div
-                key={item.itemId}
-                className="rounded-2xl border border-slate-200 bg-white p-4"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-medium text-slate-900">
-                      {item.edited_directive ?? item.directive}
-                    </p>
-                    <p className="mt-2 text-xs text-slate-500">
-                      {item.department} · {item.nature}
-                    </p>
-                  </div>
-                  <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-600">
-                    {item.deadline ?? "No deadline"}
-                  </span>
-                </div>
-              </div>
-            ))
-          ) : (
-            <div className="rounded-2xl border border-dashed border-slate-200 bg-white px-4 py-6 text-sm text-slate-500">
-              No action items were returned for this judgment yet.
-            </div>
-          )}
-        </div>
-      ) : null}
-    </section>
-  );
-}
-
 export default function FieldPanel({ docId, uploadedAt }: FieldPanelProps) {
   const fieldsById = useReviewStore((state) => state.fields);
-  const actionItemsById = useReviewStore((state) => state.actionItems);
   const activeFieldId = useReviewStore((state) => state.activeFieldId);
   const setActiveField = useReviewStore((state) => state.setActiveField);
 
@@ -103,10 +45,6 @@ export default function FieldPanel({ docId, uploadedAt }: FieldPanelProps) {
   const cardRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   const fields = useMemo(() => Object.values(fieldsById), [fieldsById]);
-  const actionItems = useMemo(
-    () => Object.values(actionItemsById),
-    [actionItemsById],
-  );
 
   const displayedFields = useMemo(() => {
     if (!flaggedOnly) {
@@ -212,9 +150,7 @@ export default function FieldPanel({ docId, uploadedAt }: FieldPanelProps) {
           </div>
         </section>
 
-        <div className="mt-8">
-          <ActionPlanPanel items={actionItems} />
-        </div>
+        <ActionPlanPanel />
       </div>
     </div>
   );

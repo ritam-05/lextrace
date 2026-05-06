@@ -6,23 +6,22 @@ import FieldPanel from "@/components/review/FieldPanel";
 import PdfViewer from "@/components/review/PdfViewer";
 import SplitPane from "@/components/review/SplitPane";
 import { useReviewStore } from "@/store/reviewStore";
-import type { ActionPlanItem, ReviewField, UploadResponse } from "@/types";
+import type { ReviewField, UploadResponse } from "@/types";
 
 interface ReviewSessionPayload {
   uploadResponse: UploadResponse;
-  actionItems: ActionPlanItem[];
   uploadedAt: string;
 }
 
 interface ReviewClientProps {
   docId: string;
   initialUploadResponse: UploadResponse | null;
-  initialActionItems: ActionPlanItem[];
   initialUploadedAt: string | null;
 }
 
 function deriveReviewFields(uploadResponse: UploadResponse): ReviewField[] {
   const zones = uploadResponse.zones;
+  const fieldEvidence = uploadResponse.field_evidence ?? {};
   const defaultPage =
     uploadResponse.paragraphs[0]?.page ?? uploadResponse.page_texts[0]?.page ?? 1;
 
@@ -42,8 +41,8 @@ function deriveReviewFields(uploadResponse: UploadResponse): ReviewField[] {
       fieldId: "case_type",
       label: "Case Type",
       value: zones.case_type,
-      confidence: defaultConfidence,
-      source_page: defaultPage,
+      confidence: fieldEvidence.case_type?.confidence ?? defaultConfidence,
+      source_page: fieldEvidence.case_type?.source_page ?? defaultPage,
       source_bbox: null,
       review_status: "unreviewed",
     },
@@ -51,15 +50,6 @@ function deriveReviewFields(uploadResponse: UploadResponse): ReviewField[] {
       fieldId: "judgment_date",
       label: "Judgment Date",
       value: zones.judgment_date,
-      confidence: defaultConfidence,
-      source_page: defaultPage,
-      source_bbox: null,
-      review_status: "unreviewed",
-    },
-    {
-      fieldId: "court_name",
-      label: "Court Name",
-      value: zones.court_name,
       confidence: defaultConfidence,
       source_page: defaultPage,
       source_bbox: null,
@@ -137,11 +127,10 @@ function RightPanel({
 export default function ReviewClient({
   docId,
   initialUploadResponse,
-  initialActionItems,
   initialUploadedAt,
 }: ReviewClientProps) {
   const initFields = useReviewStore((state) => state.initFields);
-  const initActionItems = useReviewStore((state) => state.initActionItems);
+  const initActionPlan = useReviewStore((state) => state.initActionPlan);
   const setActiveField = useReviewStore((state) => state.setActiveField);
 
   const [uploadResponse, setUploadResponse] = useState<UploadResponse | null>(
@@ -152,7 +141,6 @@ export default function ReviewClient({
 
   useEffect(() => {
     let nextUploadResponse = initialUploadResponse;
-    let nextActionItems = initialActionItems;
     let nextUploadedAt: string | null = initialUploadedAt;
 
     const sessionRaw = window.sessionStorage.getItem("lextrace_session");
@@ -161,7 +149,6 @@ export default function ReviewClient({
         const session = JSON.parse(sessionRaw) as ReviewSessionPayload;
         if (session.uploadResponse?.doc_id === docId) {
           nextUploadResponse = session.uploadResponse;
-          nextActionItems = session.actionItems ?? [];
           nextUploadedAt = session.uploadedAt ?? null;
         }
       } catch {
@@ -176,18 +163,16 @@ export default function ReviewClient({
 
     if (nextUploadResponse) {
       initFields(deriveReviewFields(nextUploadResponse));
+      initActionPlan(nextUploadResponse.action_plan);
       setActiveField(null);
     } else {
       initFields([]);
       setActiveField(null);
     }
-
-    initActionItems(nextActionItems ?? []);
   }, [
     docId,
-    initActionItems,
+    initActionPlan,
     initFields,
-    initialActionItems,
     initialUploadResponse,
     initialUploadedAt,
     setActiveField,

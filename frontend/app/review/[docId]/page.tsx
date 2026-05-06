@@ -1,7 +1,7 @@
 import { headers } from "next/headers";
 
 import ReviewClient from "./ReviewClient";
-import type { ActionPlanItem, UploadResponse } from "@/types";
+import type { UploadResponse } from "@/types";
 
 
 interface ReviewPageProps {
@@ -13,7 +13,6 @@ interface ReviewPageProps {
 
 interface VerificationDetailResponse {
   uploadResponse: UploadResponse;
-  actionItems: ActionPlanItem[];
   upload_date: string | null;
 }
 
@@ -35,7 +34,6 @@ async function getBaseUrl(): Promise<string> {
 
 async function getInitialReviewData(docId: string): Promise<{
   uploadResponse: UploadResponse | null;
-  actionItems: ActionPlanItem[];
   uploadedAt: string | null;
 }> {
   try {
@@ -50,7 +48,6 @@ async function getInitialReviewData(docId: string): Promise<{
     if (!response.ok) {
       return {
         uploadResponse: null,
-        actionItems: [],
         uploadedAt: null,
       };
     }
@@ -59,14 +56,12 @@ async function getInitialReviewData(docId: string): Promise<{
 
     return {
       uploadResponse: payload.uploadResponse ?? null,
-      actionItems: payload.actionItems ?? [],
       uploadedAt:
         typeof payload.upload_date === "string" ? payload.upload_date : null,
     };
   } catch {
     return {
       uploadResponse: null,
-      actionItems: [],
       uploadedAt: null,
     };
   }
@@ -81,7 +76,6 @@ export default async function ReviewPage({ params }: ReviewPageProps) {
     <ReviewClient
       docId={docId}
       initialUploadResponse={initialData.uploadResponse}
-      initialActionItems={initialData.actionItems}
       initialUploadedAt={initialData.uploadedAt}
     />
   );

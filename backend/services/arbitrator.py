@@ -40,7 +40,14 @@ class Arbitrator:
     # Fields that both Regex and RAG should extract
     OVERLAPPING_FIELDS = {
         "case_number",
-        "court_name",
+        "bench",
+        "judgment_date",
+        "petitioner",
+        "respondent"
+    }
+
+    # Critical metadata fields where RAG fallback should be guarded
+    CRITICAL_FALLBACK_FIELDS = {
         "bench",
         "judgment_date",
         "petitioner",
@@ -198,10 +205,56 @@ class Arbitrator:
             rag_value=rag_value,
             regex_source=regex_source,
             rag_source=rag_source,
-            notes=notes
-            , similarity=round(similarity, 2)
+            notes=notes,
+            similarity=round(similarity, 2)
         )
     
+    def _is_rag_invalid(self, rag_output: Optional[Any]) -> bool:
+        """Return True when RAG output is missing, empty, or very low confidence."""
+        if rag_output is None:
+            return True
+        if isinstance(rag_output, dict):
+            value = rag_output.get("value")
+            if not isinstance(value, str) or not value.strip():
+                return True
+            confidence = rag_output.get("confidence")
+            if isinstance(confidence, (int, float)) and confidence < 0.55:
+                return True
+            return False
+        if isinstance(rag_output, str):
+            return not rag_output.strip()
+        if isinstance(rag_output, list):
+            return not bool(rag_output)
+        return True
+
+    def _force_regex_fallback(self, field_name: str, regex_output: Optional[Dict[str, Any]]) -> ArbitrationResult:
+        """Force regex as the final source when RAG fails for multiple critical fields."""
+        regex_value = regex_output.get("value") if regex_output else None
+        regex_confidence = regex_output.get("confidence", 0.8) if regex_output else 0.0
+
+        if regex_value:
+            return ArbitrationResult(
+                field_name=field_name,
+                final_value=regex_value,
+                state="single_source_regex",
+                confidence=round(regex_confidence * 0.75, 2),
+                regex_value=regex_value,
+                rag_value=None,
+                regex_source={
+                    "para_index": regex_output.get("para_index"),
+                    "char_start": regex_output.get("char_start"),
+                    "char_end": regex_output.get("char_end"),
+                    "source": regex_output.get("source"),
+                } if regex_output else None,
+                rag_source=None,
+                notes=(
+                    "RAG failed for multiple critical fields; falling back to Regex for this field."
+                ),
+                similarity=0.0,
+            )
+
+        return self.arbitrate_field(field_name, regex_output, None)
+
     def arbitrate_all(
         self,
         regex_output: Dict[str, Any],
@@ -213,12 +266,22 @@ class Arbitrator:
         """
         results = {}
         
+        invalid_critical = [
+            field
+            for field in self.CRITICAL_FALLBACK_FIELDS
+            if self._is_rag_invalid(rag_output.get(field))
+        ]
+        force_regex_fallback = len(invalid_critical) >= 3
+
         # 1. Arbitrate overlapping fields
         for field in self.OVERLAPPING_FIELDS:
             regex_field = regex_output.get(field)
             rag_field = rag_output.get(field)  # This is now the direct value
-            
-            result = self.arbitrate_field(field, regex_field, rag_field)
+
+            if force_regex_fallback and field in invalid_critical:
+                result = self._force_regex_fallback(field, regex_field)
+            else:
+                result = self.arbitrate_field(field, regex_field, rag_field)
             results[field] = result
         
         # 2. Add RAG-only fields (auto-marked as single_source_rag)
