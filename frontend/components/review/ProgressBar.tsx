@@ -3,14 +3,46 @@
 import { useMemo } from "react";
 
 import { useReviewStore } from "@/store/reviewStore";
+import type { ActionPlan } from "@/types";
+
+function isVerified(status: string): boolean {
+  return status === "approved" || status === "edited";
+}
+
+function countActionItems(actionPlan: ActionPlan | null): number {
+  if (!actionPlan) {
+    return 0;
+  }
+
+  return (
+    actionPlan.key_directions.length +
+    actionPlan.compliance_steps.length +
+    actionPlan.timelines.length
+  );
+}
+
+function countVerifiedActionItems(actionPlan: ActionPlan | null): number {
+  if (!actionPlan) {
+    return 0;
+  }
+
+  return [
+    ...actionPlan.key_directions,
+    ...actionPlan.compliance_steps,
+    ...actionPlan.timelines,
+  ].filter((item) => isVerified(item.review_status)).length;
+}
 
 export default function ProgressBar() {
-  const totalCount = useReviewStore((state) => state.totalCount);
-  const verifiedCount = useReviewStore((state) => state.verifiedCount);
+  const fieldsById = useReviewStore((state) => state.fields);
+  const actionPlan = useReviewStore((state) => state.actionPlan);
 
   const { totalItems, reviewedItems, progressPercent, toneClass } = useMemo(() => {
-    const total = totalCount();
-    const verified = verifiedCount();
+    const fields = Object.values(fieldsById);
+    const total = fields.length + countActionItems(actionPlan);
+    const verified =
+      fields.filter((field) => isVerified(field.review_status)).length +
+      countVerifiedActionItems(actionPlan);
     const percent = total > 0 ? (verified / total) * 100 : 0;
 
     return {
@@ -24,7 +56,7 @@ export default function ProgressBar() {
             ? "bg-amber-500"
             : "bg-rose-500",
     };
-  }, [totalCount, verifiedCount]);
+  }, [actionPlan, fieldsById]);
 
   return (
     <div className="space-y-2">
