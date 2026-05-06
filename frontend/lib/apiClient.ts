@@ -1,11 +1,15 @@
 import type {
-  ActionPlanItem,
+  ActionPlan,
   ApiError,
   DocumentStatus,
   JudgmentDocument,
   UploadResponse,
   VerificationPayload,
 } from "@/types";
+
+interface UploadProxyResponse {
+  uploadResponse: UploadResponse;
+}
 
 const REQUEST_TIMEOUT_MS = 30_000;
 
@@ -69,11 +73,11 @@ async function request<T>(
   }
 }
 
-export async function uploadDocument(file: File): Promise<UploadResponse> {
+export async function uploadDocument(file: File): Promise<UploadProxyResponse> {
   const formData = new FormData();
   formData.append("file", file, file.name);
 
-  return request<UploadResponse>("/api/upload", {
+  return request<UploadProxyResponse>("/api/upload", {
     method: "POST",
     body: formData,
   });
@@ -82,8 +86,8 @@ export async function uploadDocument(file: File): Promise<UploadResponse> {
 export async function generateActionPlan(
   docId: string,
   text: string,
-): Promise<ActionPlanItem[]> {
-  return request<ActionPlanItem[]>("/api/action-plan", {
+): Promise<ActionPlan> {
+  return request<ActionPlan>("/api/action-plan", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

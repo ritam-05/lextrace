@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import type { ActionPlanItem, ApiError } from "@/types";
+import type { ActionPlan, ApiError } from "@/types";
 
 const FASTAPI_BASE_URL = (
   process.env.FASTAPI_BASE_URL ?? "http://localhost:8000"
@@ -88,8 +88,8 @@ export async function POST(request: Request): Promise<Response> {
       return toErrorResponse(message, response.status);
     }
 
-    const payload = (await response.json()) as ActionPlanItem[];
-    return NextResponse.json<ActionPlanItem[]>(payload, { status: 200 });
+    const payload = (await response.json()) as ActionPlan;
+    return NextResponse.json<ActionPlan>(payload, { status: 200 });
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") {
       return toErrorResponse("Action plan processing timed out after 60 seconds", 504);

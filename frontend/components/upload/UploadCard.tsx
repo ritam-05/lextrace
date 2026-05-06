@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { uploadDocument } from "@/lib/apiClient";
-import type { ActionPlanItem, UploadResponse } from "@/types";
+import type { UploadResponse } from "@/types";
 import DropZone from "./DropZone";
 import ProcessingStepper from "./ProcessingStepper";
 
@@ -13,12 +13,10 @@ interface UploadCardProps {
 
 interface CombinedUploadResponse {
   uploadResponse: UploadResponse;
-  actionItems: ActionPlanItem[];
 }
 
 interface SessionPayload {
   uploadResponse: UploadResponse;
-  actionItems: ActionPlanItem[];
   uploadedAt: string;
 }
 
@@ -125,7 +123,6 @@ export default function UploadCard({
 
       const sessionPayload: SessionPayload = {
         uploadResponse: result.uploadResponse,
-        actionItems: result.actionItems ?? [],
         uploadedAt: new Date().toISOString(),
       };
 

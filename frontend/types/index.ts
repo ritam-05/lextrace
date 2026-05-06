@@ -56,6 +56,16 @@ export interface ExtractedZones {
 }
 
 /**
+ * Source metadata associated with an extracted field.
+ */
+export interface ExtractedFieldEvidence {
+  /** Confidence score from 0.0 to 1.0 assigned by the producing extractor. */
+  confidence: number;
+  /** One-indexed source page number when known. */
+  source_page: number | null;
+}
+
+/**
  * A single extracted field shown in the human review experience.
  */
 export interface ReviewField {
@@ -77,28 +87,60 @@ export interface ReviewField {
   edited_value?: string;
 }
 
-/**
- * A single structured action item derived from the judgment.
- */
-export interface ActionPlanItem {
-  /** Stable identifier for this action item. */
-  itemId: string;
-  /** Court-ordered action summarized as a reviewable directive. */
-  directive: string;
-  /** Government department responsible for acting on the directive. */
-  department: string;
-  /** Deadline as an ISO date string, or null if none is known. */
-  deadline: string | null;
-  /** Whether the deadline is explicitly stated or inferred by the system. */
-  deadline_type: "explicit" | "inferred";
-  /** High-level category of the action item. */
-  nature: ActionNature;
-  /** Confidence score from 0.0 to 1.0 assigned to the action item. */
-  confidence: number;
-  /** Current review decision for this action item. */
+/** A single court directive - what the court ordered */
+export interface KeyDirection {
+  id: string;
+  text: string;
   review_status: ReviewStatus;
-  /** Human-edited replacement directive after reviewer intervention. */
-  edited_directive?: string;
+  edited_text?: string;
+}
+
+/** A compliance step - what the govt must do */
+export interface ComplianceStep {
+  id: string;
+  text: string;
+  review_status: ReviewStatus;
+  edited_text?: string;
+}
+
+/**
+ * A standalone timeline entry.
+ * IMPORTANT: timelines are independent of individual
+ * directives - they apply to the judgment as a whole.
+ */
+export interface TimelineEntry {
+  id: string;
+  text: string;
+  review_status: ReviewStatus;
+  edited_text?: string;
+}
+
+/** Appeal risk analysis from the AI */
+export interface AppealAnalysis {
+  /** HIGH / MEDIUM / LOW / NOT_APPLICABLE */
+  consideration: string;
+  /**
+   * Supporting reasons behind the appeal recommendation.
+   */
+  justification: string[];
+  /**
+   * -1 = no adverse impact, favorable to government
+   *  0 = neutral
+   *  1-3 = low risk, 4-6 = medium, 7-10 = high risk
+   */
+  risk_score: number;
+}
+
+/** The complete structured action plan for one judgment */
+export interface ActionPlan {
+  key_directions: KeyDirection[];
+  compliance_steps: ComplianceStep[];
+  /** Independent section - not attached to any directive */
+  timelines: TimelineEntry[];
+  responsible_departments: string[];
+  nature_of_action: string;
+  appeal_analysis: AppealAnalysis;
+  llm_context: string;
 }
 
 /**
@@ -145,8 +187,8 @@ export interface AuditEntry {
 export interface VerificationPayload {
   /** Full set of reviewed metadata fields for the document. */
   fields: ReviewField[];
-  /** Full set of reviewed action items for the document. */
-  action_items: ActionPlanItem[];
+  /** Full structured action plan for the document. */
+  action_plan: ActionPlan;
   /** Name of the reviewer completing the verification. */
   reviewer: string;
   /** ISO timestamp indicating when the review was completed. */
@@ -203,6 +245,10 @@ export interface UploadResponse {
   operative_section: string | null;
   /** Structured case metadata extracted from the PDF. */
   zones: ExtractedZones;
+  /** Full structured action plan generated for this judgment. */
+  action_plan: ActionPlan;
+  /** Optional field-level evidence used to drive the review UI. */
+  field_evidence?: Partial<Record<string, ExtractedFieldEvidence>>;
   /** PDF page dimensions used for overlay rendering. */
   page_dimensions: PageDimensions[];
 }

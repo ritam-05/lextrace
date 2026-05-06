@@ -1,5 +1,10 @@
 import { NextResponse } from "next/server";
-import type { ActionNature, ActionPlanItem, ApiError, ReviewStatus, UploadResponse } from "@/types";
+import type {
+  ActionPlan,
+  ApiError,
+  ExtractedFieldEvidence,
+  UploadResponse,
+} from "@/types";
 
 const FASTAPI_BASE_URL = (
   process.env.FASTAPI_BASE_URL ?? "http://localhost:8000"
@@ -26,11 +31,40 @@ interface VerificationPayload {
     }
   >;
   rag_output?: Record<string, unknown>;
+  regex_output?: Record<string, unknown>;
+}
+
+function getRegexFieldEvidence(
+  regexOutput: Record<string, unknown> | undefined,
+  key: string,
+): ExtractedFieldEvidence | undefined {
+  const candidate = regexOutput?.[key];
+  if (!candidate || typeof candidate !== "object") {
+    return undefined;
+  }
+
+  const payload = candidate as {
+    confidence?: unknown;
+    source?: { page?: unknown };
+  };
+
+  const confidence =
+    typeof payload.confidence === "number" ? payload.confidence : undefined;
+  const sourcePage =
+    typeof payload.source?.page === "number" ? payload.source.page : null;
+
+  if (confidence === undefined && sourcePage === null) {
+    return undefined;
+  }
+
+  return {
+    confidence: confidence ?? 0,
+    source_page: sourcePage,
+  };
 }
 
 interface VerificationDetailResponse {
   uploadResponse: UploadResponse;
-  actionItems: ActionPlanItem[];
   upload_date: string | null;
 }
 
@@ -38,7 +72,7 @@ interface VerificationRequestBody {
   reviewer?: string;
   reviewed_at?: string;
   fields?: unknown[];
-  action_items?: unknown[];
+  action_plan?: unknown;
 }
 
 function buildBackendUrl(path: string): string {
@@ -114,6 +148,14 @@ function getArbitrationValue(
   return typeof value === "string" && value.trim().length > 0 ? value : null;
 }
 
+function getRegexValue(
+  regexOutput: Record<string, unknown> | undefined,
+  key: string,
+): string | null {
+  const candidate = regexOutput?.[key];
+  return normalizeRagFieldValue(candidate);
+}
+
 function getHybridValue(
   ragOutput: Record<string, unknown> | undefined,
   arbitrationResults: VerificationPayload["arbitration_results"],
@@ -133,41 +175,13 @@ function getHybridBench(
     : [];
 }
 
-function asStringList(value: unknown): string[] {
-  if (Array.isArray(value)) {
-    return value.filter((item): item is string => typeof item === "string");
-  }
-  if (typeof value === "string" && value.trim().length > 0) {
-    return [value];
-  }
-  return [];
-}
-
-function normalizeNature(value: string | undefined): ActionNature {
-  const normalized = (value ?? "").toLowerCase();
-  if (normalized.includes("appeal")) {
-    return "Appeal";
-  }
-  if (normalized.includes("advis")) {
-    return "Advisory";
-  }
-  return "Compliance";
-}
-
-function normalizeReviewStatus(value: unknown): ReviewStatus {
-  return value === "approved" ||
-    value === "edited" ||
-    value === "rejected"
-    ? value
-    : "unreviewed";
-}
-
 function buildUploadResponse(
   docId: string,
   payload: VerificationPayload,
 ): UploadResponse {
   const arbitrationResults = payload.arbitration_results;
   const ragOutput = payload.rag_output;
+  const regexOutput = payload.regex_output;
   const headerMetadata = payload.header_metadata;
   return {
     doc_id: docId,
@@ -177,7 +191,8 @@ function buildUploadResponse(
     operative_section: null,
     zones: {
       case_number: getHybridValue(ragOutput, arbitrationResults, "case_number"),
-      case_type: getHybridValue(ragOutput, arbitrationResults, "case_type"),
+      case_type: getHybridValue(ragOutput, arbitrationResults, "case_type")
+        ?? getRegexValue(regexOutput, "case_type"),
       judgment_date: normalizeHeaderValue(headerMetadata?.Date_of_order) ?? getHybridValue(ragOutput, arbitrationResults, "judgment_date"),
       bench: normalizeHeaderValue(headerMetadata?.Name_of_the_judge)
         ? [normalizeHeaderValue(headerMetadata?.Name_of_the_judge) as string]
@@ -185,46 +200,61 @@ function buildUploadResponse(
       petitioner: (headerMetadata?.Petitioners && headerMetadata.Petitioners.length > 0 ? headerMetadata.Petitioners.join(", ") : null) ?? getHybridValue(ragOutput, arbitrationResults, "petitioner"),
       respondent: (headerMetadata?.Respondents && headerMetadata.Respondents.length > 0 ? headerMetadata.Respondents.join(", ") : null) ?? getHybridValue(ragOutput, arbitrationResults, "respondent"),
     },
+    action_plan: buildActionPlan(payload),
+    field_evidence: {
+      case_type: getRegexFieldEvidence(regexOutput, "case_type"),
+    },
     page_dimensions: [],
   };
 }
 
-function buildActionItems(
-  docId: string,
-  payload: VerificationPayload,
-): ActionPlanItem[] {
-  const ragOutput = payload.rag_output ?? {};
-  const actionPlan = (ragOutput?.Action_Plan ?? {}) as {
-    Nature_of_Action?: string;
-    Compliance_Required?: string | string[];
-    Responsible_Departments?: string | string[];
-    Key_Timelines?: string | string[];
+function buildActionPlan(payload: VerificationPayload): ActionPlan {
+  const ragOutput = payload.rag_output as {
+    Extraction?: {
+      Key_Directions?: string[];
+    };
+    Action_Plan?: {
+      Compliance_Required?: string[];
+      Key_Timelines?: string[];
+      Responsible_Departments?: string[];
+      Nature_of_Action?: string;
+      Consideration_for_Appeal?: string;
+      Appeal_Justification?: string[];
+      Appeal_Risk_Score?: number;
+      LLM_Context?: string;
+    };
+  } | undefined;
+
+  const ragExtraction = ragOutput?.Extraction ?? {};
+  const ragPlan = ragOutput?.Action_Plan ?? {};
+
+  return {
+    key_directions: (ragExtraction.Key_Directions ?? []).map((text, index) => ({
+      id: `dir_${index}`,
+      text,
+      review_status: "unreviewed",
+    })),
+    compliance_steps: (ragPlan.Compliance_Required ?? []).map((text, index) => ({
+      id: `comp_${index}`,
+      text,
+      review_status: "unreviewed",
+    })),
+    timelines: (ragPlan.Key_Timelines ?? []).map((text, index) => ({
+      id: `tl_${index}`,
+      text,
+      review_status: "unreviewed",
+    })),
+    responsible_departments: (ragPlan.Responsible_Departments ?? []).filter(
+      (department) => department && department !== "Not Specified",
+    ),
+    nature_of_action: ragPlan.Nature_of_Action ?? "",
+    appeal_analysis: {
+      consideration: ragPlan.Consideration_for_Appeal ?? "LOW",
+      justification: ragPlan.Appeal_Justification ?? [],
+      risk_score: ragPlan.Appeal_Risk_Score ?? 0,
+    },
+    llm_context: ragPlan.LLM_Context ?? "",
   };
-  let directives = asStringList((ragOutput as Record<string, unknown>).directives);
-  if (directives.length === 0) {
-    directives = asStringList(actionPlan?.Compliance_Required);
-  }
-
-  const departments =
-    asStringList(ragOutput.responsible_departments).length > 0
-      ? asStringList(ragOutput.responsible_departments)
-      : asStringList(actionPlan?.Responsible_Departments);
-  const deadlines =
-    asStringList(ragOutput.deadlines).length > 0
-      ? asStringList(ragOutput.deadlines)
-      : asStringList(actionPlan?.Key_Timelines);
-  const nature = normalizeNature(actionPlan?.Nature_of_Action);
-
-  return directives.map((directive, index) => ({
-    itemId: `${docId}-action-${index + 1}`,
-    directive,
-    department: departments[index] ?? departments[0] ?? "Not specified",
-    deadline: deadlines[index] ?? null,
-    deadline_type: deadlines[index] ? "explicit" : "inferred",
-    nature,
-    confidence: 0.8,
-    review_status: normalizeReviewStatus(undefined),
-  }));
 }
 
 export async function GET(
@@ -270,7 +300,6 @@ export async function GET(
     const payload = JSON.parse(responseBody) as VerificationPayload;
     const detailResponse: VerificationDetailResponse = {
       uploadResponse: buildUploadResponse(docId, payload),
-      actionItems: buildActionItems(docId, payload),
       upload_date:
         typeof payload.created_at === "string" ? payload.created_at : null,
     };
