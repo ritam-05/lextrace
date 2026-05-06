@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import FieldPanel from "@/components/review/FieldPanel";
 import PdfViewer from "@/components/review/PdfViewer";
 import SplitPane from "@/components/review/SplitPane";
+import SubmitBar from "@/components/review/SubmitBar";
 import { useReviewStore } from "@/store/reviewStore";
 import type { ReviewField, UploadResponse } from "@/types";
 
@@ -180,7 +181,14 @@ export default function ReviewClient({
 
   return (
     <SplitPane
-      left={<FieldPanel docId={docId} uploadedAt={uploadedAt} />}
+      left={(
+        <div className="flex h-full min-h-0 flex-col">
+          <div className="min-h-0 flex-1">
+            <FieldPanel docId={docId} uploadedAt={uploadedAt} />
+          </div>
+          <SubmitBar docId={docId} />
+        </div>
+      )}
       right={
         <RightPanel pdfDataUrl={pdfDataUrl} uploadResponse={uploadResponse} />
       }
