@@ -227,6 +227,26 @@ function asStringList(value: unknown): string[] {
   return [];
 }
 
+function normalizeForTimelineMatch(value: string): string {
+  return value.toLowerCase().replace(/[^\w\s]/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function inferTimelineStepIndex(
+  timelineText: string,
+  complianceSteps: string[],
+): number | undefined {
+  const normalizedTimeline = normalizeForTimelineMatch(timelineText);
+  if (!normalizedTimeline) {
+    return undefined;
+  }
+
+  const matchIndex = complianceSteps.findIndex((stepText) =>
+    normalizeForTimelineMatch(stepText).includes(normalizedTimeline),
+  );
+
+  return matchIndex >= 0 ? matchIndex + 1 : undefined;
+}
+
 function normalizeUploadResponse(
   payload: FastApiUploadPayload,
   filename: string,
@@ -281,6 +301,7 @@ function normalizeActionPlan(payload: FastApiUploadPayload): ActionPlan {
 
   const ragExtraction = ragOutput?.Extraction ?? {};
   const ragPlan = ragOutput?.Action_Plan ?? {};
+  const complianceSteps = ragPlan.Compliance_Required ?? [];
 
   const action_plan: ActionPlan = {
     key_directions: (ragExtraction.Key_Directions ?? [])
@@ -290,7 +311,7 @@ function normalizeActionPlan(payload: FastApiUploadPayload): ActionPlan {
         review_status: "unreviewed",
       })),
 
-    compliance_steps: (ragPlan.Compliance_Required ?? [])
+    compliance_steps: complianceSteps
       .map((text: string, i: number) => ({
         id: `comp_${i}`,
         text,
@@ -301,6 +322,7 @@ function normalizeActionPlan(payload: FastApiUploadPayload): ActionPlan {
       .map((text: string, i: number) => ({
         id: `tl_${i}`,
         text,
+        related_step_index: inferTimelineStepIndex(text, complianceSteps),
         review_status: "unreviewed",
       })),
 

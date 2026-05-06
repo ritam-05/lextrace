@@ -391,6 +391,11 @@ export default function ActionPlanPanel() {
                     <p className="ml-1.5 text-sm font-medium text-slate-800">
                       {timeline.edited_text ?? timeline.text}
                     </p>
+                    {timeline.related_step_index ? (
+                      <span className="ml-2 rounded-full bg-white/70 px-2 py-0.5 text-xs text-amber-700">
+                        Step {timeline.related_step_index}
+                      </span>
+                    ) : null}
                   </div>
                   <InlineReviewControls
                     status={timeline.review_status}

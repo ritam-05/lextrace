@@ -175,6 +175,26 @@ function getHybridBench(
     : [];
 }
 
+function normalizeForTimelineMatch(value: string): string {
+  return value.toLowerCase().replace(/[^\w\s]/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function inferTimelineStepIndex(
+  timelineText: string,
+  complianceSteps: string[],
+): number | undefined {
+  const normalizedTimeline = normalizeForTimelineMatch(timelineText);
+  if (!normalizedTimeline) {
+    return undefined;
+  }
+
+  const matchIndex = complianceSteps.findIndex((stepText) =>
+    normalizeForTimelineMatch(stepText).includes(normalizedTimeline),
+  );
+
+  return matchIndex >= 0 ? matchIndex + 1 : undefined;
+}
+
 function buildUploadResponse(
   docId: string,
   payload: VerificationPayload,
@@ -227,6 +247,7 @@ function buildActionPlan(payload: VerificationPayload): ActionPlan {
 
   const ragExtraction = ragOutput?.Extraction ?? {};
   const ragPlan = ragOutput?.Action_Plan ?? {};
+  const complianceSteps = ragPlan.Compliance_Required ?? [];
 
   return {
     key_directions: (ragExtraction.Key_Directions ?? []).map((text, index) => ({
@@ -234,7 +255,7 @@ function buildActionPlan(payload: VerificationPayload): ActionPlan {
       text,
       review_status: "unreviewed",
     })),
-    compliance_steps: (ragPlan.Compliance_Required ?? []).map((text, index) => ({
+    compliance_steps: complianceSteps.map((text, index) => ({
       id: `comp_${index}`,
       text,
       review_status: "unreviewed",
@@ -242,6 +263,7 @@ function buildActionPlan(payload: VerificationPayload): ActionPlan {
     timelines: (ragPlan.Key_Timelines ?? []).map((text, index) => ({
       id: `tl_${index}`,
       text,
+      related_step_index: inferTimelineStepIndex(text, complianceSteps),
       review_status: "unreviewed",
     })),
     responsible_departments: (ragPlan.Responsible_Departments ?? []).filter(

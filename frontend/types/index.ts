@@ -111,6 +111,7 @@ export interface ComplianceStep {
 export interface TimelineEntry {
   id: string;
   text: string;
+  related_step_index?: number;
   review_status: ReviewStatus;
   edited_text?: string;
 }
