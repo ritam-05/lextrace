@@ -48,18 +48,62 @@ export default function SubmitBar({ docId }: SubmitBarProps) {
         ? JSON.parse(rawSession)
         : null;
 
+      const finalFields = Object.values(fieldsById)
+        .filter(
+          (f: ReviewField) =>
+            f.review_status === "approved" || f.review_status === "edited",
+        )
+        .map((field) =>
+          field.review_status === "edited"
+            ? {
+                ...field,
+                value: field.edited_value ?? field.value,
+              }
+            : field,
+        );
+
+      const finalActionPlan = {
+        ...actionPlan,
+        key_directions: actionPlan.key_directions
+          .filter(
+            (item) =>
+              item.review_status === "approved" || item.review_status === "edited",
+          )
+          .map((item) =>
+            item.review_status === "edited"
+              ? { ...item, text: item.edited_text ?? item.text }
+              : item,
+          ),
+        compliance_steps: actionPlan.compliance_steps
+          .filter(
+            (item) =>
+              item.review_status === "approved" || item.review_status === "edited",
+          )
+          .map((item) =>
+            item.review_status === "edited"
+              ? { ...item, text: item.edited_text ?? item.text }
+              : item,
+          ),
+        timelines: actionPlan.timelines
+          .filter(
+            (item) =>
+              item.review_status === "approved" || item.review_status === "edited",
+          )
+          .map((item) =>
+            item.review_status === "edited"
+              ? { ...item, text: item.edited_text ?? item.text }
+              : item,
+          ),
+      };
+
       const verifiedSession = {
         docId,
         filename:
           parsedSession?.uploadResponse?.filename || "Judgment.pdf",
         verifiedAt: new Date().toISOString(),
         reviewer: currentUser?.name || "Reviewer",
-        fields: Object.values(fieldsById).filter(
-          (f: ReviewField) =>
-            f.review_status === "approved" ||
-            f.review_status === "edited",
-        ),
-        actionPlan,
+        fields: finalFields,
+        actionPlan: finalActionPlan,
       };
 
       sessionStorage.setItem(

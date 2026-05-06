@@ -69,6 +69,9 @@ export default function UploadCard({
     setIsProcessing(false);
     setCurrentStep(1);
     setUploadError(null);
+    window.sessionStorage.removeItem("lextrace_verified");
+    window.sessionStorage.removeItem("lextrace_session");
+    window.sessionStorage.removeItem("lextrace_pdf_file");
   };
 
   const validateSelection = (): string | null => {

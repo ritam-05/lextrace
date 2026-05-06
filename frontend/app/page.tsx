@@ -9,6 +9,7 @@ export default function HomePage() {
   const [uploadError, setUploadError] = useState<string | null>(null);
 
   useEffect(() => {
+    window.sessionStorage.removeItem("lextrace_verified");
     window.sessionStorage.removeItem("lextrace_session");
     window.sessionStorage.removeItem("lextrace_pdf_file");
   }, []);

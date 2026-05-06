@@ -31,6 +31,10 @@ interface ReviewStore {
   flaggedFields: () => ReviewField[];
 }
 
+function isVerifiedItem(item: { review_status: string }): boolean {
+  return item.review_status === "approved" || item.review_status === "edited";
+}
+
 function countReviewed(plan: ActionPlan | null): number {
   if (!plan) {
     return 0;
@@ -40,7 +44,7 @@ function countReviewed(plan: ActionPlan | null): number {
     ...plan.key_directions,
     ...plan.compliance_steps,
     ...plan.timelines,
-  ].filter((item) => item.review_status === "approved").length;
+  ].filter(isVerifiedItem).length;
 }
 
 function countActionItems(plan: ActionPlan | null): number {

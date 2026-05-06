@@ -10,6 +10,40 @@ from backend.database import Database
 router = APIRouter()
 
 
+@router.post("/admin/reset")
+async def reset_all_data():
+    """
+    Clear all persisted LexTrace runtime data.
+    Intended for deployment/demo resets from the dashboard flow.
+    """
+    db = Database.get_db()
+
+    try:
+        collections = (
+            "extractions",
+            "verifications",
+            "approved_extractions",
+            "parent_documents",
+            "child_chunks",
+        )
+
+        deleted_counts = {}
+        for collection_name in collections:
+            result = db[collection_name].delete_many({})
+            deleted_counts[collection_name] = result.deleted_count
+
+        return {
+            "status": "success",
+            "message": "All persisted LexTrace data has been cleared.",
+            "deleted_counts": deleted_counts,
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error resetting persisted data: {str(e)}"
+        )
+
+
 @router.get("/verify/{doc_id}")
 async def get_verification(doc_id: str):
     """

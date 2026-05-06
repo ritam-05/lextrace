@@ -180,7 +180,9 @@ export default function ActionPlanPanel() {
       ...actionPlan.key_directions,
       ...actionPlan.compliance_steps,
       ...actionPlan.timelines,
-    ].filter((item) => item.review_status === "approved").length;
+    ].filter(
+      (item) => item.review_status === "approved" || item.review_status === "edited",
+    ).length;
   }, [actionPlan]);
 
   return (
