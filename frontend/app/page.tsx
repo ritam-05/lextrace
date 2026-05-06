@@ -34,9 +34,6 @@ export default function HomePage() {
           <h1 className="text-3xl font-bold tracking-tight text-slate-900 font-[family-name:var(--font-geist-sans)]">
             LeXTrace
           </h1>
-          <p className="text-slate-500 text-sm mt-1">
-            Legal Judgment Review System
-          </p>
           <div className="mt-6 border-t border-slate-200" />
         </div>
       </section>

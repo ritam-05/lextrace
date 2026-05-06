@@ -149,12 +149,9 @@ export default function DropZone({
             </svg>
 
             <p className="text-sm font-medium text-slate-700 mb-1">
-              Drop your judgment PDF here or click to browse
+              Upload the judgment order for official review
             </p>
-            <p className="text-xs text-slate-400">
-              PDF only, up to 50MB. The document will be processed for legal
-              review.
-            </p>
+            <p className="text-xs text-slate-400">PDF only, up to 50MB.</p>
           </>
         ) : (
           <>

@@ -16,7 +16,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "LeXTrace",
-  description: "Legal Judgment Review System",
+  description: "LeXTrace",
 };
 
 export default function RootLayout({

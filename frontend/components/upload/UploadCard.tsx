@@ -196,7 +196,7 @@ export default function UploadCard({
         disabled={!selectedFile || isProcessing}
         className="w-full mt-4 py-3 px-4 bg-slate-900 hover:bg-slate-700 text-white text-sm font-medium rounded-xl transition-colors duration-200 disabled:opacity-40 disabled:cursor-not-allowed"
       >
-        Upload & Analyse Judgment
+        Upload
       </button>
     </div>
   );

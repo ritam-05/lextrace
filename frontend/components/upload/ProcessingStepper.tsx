@@ -6,26 +6,11 @@ interface ProcessingStepperProps {
 }
 
 const steps = [
-  {
-    label: "Uploading file",
-    description: "Sending your PDF to the server securely.",
-  },
-  {
-    label: "Reading PDF",
-    description: "Extracting text from all pages.",
-  },
-  {
-    label: "Extracting fields",
-    description: "Identifying case details and metadata.",
-  },
-  {
-    label: "Generating action plan",
-    description: "AI is analysing directives and timelines.",
-  },
-  {
-    label: "Ready for review",
-    description: "",
-  },
+  { label: "Uploading file" },
+  { label: "Reading PDF" },
+  { label: "Extracting fields" },
+  { label: "Generating action plan" },
+  { label: "Ready for review" },
 ] as const;
 
 function DocumentIcon() {
@@ -167,21 +152,6 @@ export default function ProcessingStepper({
                 >
                   {step.label}
                 </p>
-
-                {step.description !== "" ? (
-                  <p
-                    className={[
-                      "text-xs mt-0.5",
-                      isCompleted
-                        ? "text-slate-400"
-                        : isCurrent
-                          ? "text-slate-500"
-                          : "text-slate-300 opacity-0",
-                    ].join(" ")}
-                  >
-                    {step.description}
-                  </p>
-                ) : null}
               </div>
             </div>
           );
