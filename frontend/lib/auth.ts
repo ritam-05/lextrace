@@ -8,7 +8,7 @@ export interface User {
 }
 
 export const currentUser: User = {
-  name: "Ananya Sharma",
+  name: "Government Official",
   role: "reviewer",
 };
 

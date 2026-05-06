@@ -1,7 +1,7 @@
 "use client";
 
 import type { ComplianceStep } from "@/types";
-import { groupActionsByDepartment } from "@/lib/dashboard-utils";
+import { filterTrusted, getReviewedText, groupActionsByDepartment } from "@/lib/dashboard-utils";
 
 interface RequiredActionsSectionProps {
   complianceSteps: ComplianceStep[];
@@ -12,7 +12,8 @@ export default function RequiredActionsSection({
   complianceSteps,
   departments,
 }: RequiredActionsSectionProps) {
-  const groupedActions = groupActionsByDepartment(complianceSteps, departments);
+  const trustedSteps = filterTrusted(complianceSteps);
+  const groupedActions = groupActionsByDepartment(trustedSteps, departments);
 
   return (
     <section className="mb-6 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -44,21 +45,14 @@ export default function RequiredActionsSection({
               </div>
 
               <div className="space-y-3">
-                {group.actions.map((action) => {
-                  const text =
-                    action.review_status === "edited"
-                      ? action.edited_text ?? action.text
-                      : action.text;
-
-                  return (
-                    <div key={action.id} className="flex items-start gap-3">
-                      <span className="mt-0.5 text-emerald-600" aria-hidden="true">
-                        □
-                      </span>
-                      <p className="text-sm text-slate-700">{text}</p>
-                    </div>
-                  );
-                })}
+                {group.actions.map((action) => (
+                  <div key={action.id} className="flex items-start gap-3">
+                    <span className="mt-0.5 text-emerald-600" aria-hidden="true">
+                      □
+                    </span>
+                    <p className="text-sm text-slate-700">{getReviewedText(action)}</p>
+                  </div>
+                ))}
               </div>
             </div>
           ))}

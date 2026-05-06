@@ -1,7 +1,7 @@
 "use client";
 
 import type { TimelineEntry } from "@/types";
-import { filterApproved } from "@/lib/dashboard-utils";
+import { filterTrusted, getReviewedText } from "@/lib/dashboard-utils";
 
 interface TimelinesSectionProps {
   timelines: TimelineEntry[];
@@ -22,7 +22,7 @@ function isTimeSensitive(text: string): boolean {
 export default function TimelinesSection({
   timelines,
 }: TimelinesSectionProps) {
-  const trustedTimelines = filterApproved(timelines);
+  const trustedTimelines = filterTrusted(timelines);
 
   return (
     <section className="mb-6 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -38,10 +38,7 @@ export default function TimelinesSection({
       ) : (
         <div className="space-y-4">
           {trustedTimelines.map((timeline) => {
-            const text =
-              timeline.review_status === "edited"
-                ? timeline.edited_text ?? timeline.text
-                : timeline.text;
+            const text = getReviewedText(timeline);
 
             return (
               <div

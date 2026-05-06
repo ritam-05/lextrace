@@ -1,7 +1,7 @@
 "use client";
 
 import type { KeyDirection } from "@/types";
-import { filterApproved } from "@/lib/dashboard-utils";
+import { filterTrusted, getReviewedText } from "@/lib/dashboard-utils";
 
 interface DirectivesSectionProps {
   directives: KeyDirection[];
@@ -10,7 +10,7 @@ interface DirectivesSectionProps {
 export default function DirectivesSection({
   directives,
 }: DirectivesSectionProps) {
-  const trustedDirectives = filterApproved(directives);
+  const trustedDirectives = filterTrusted(directives);
 
   return (
     <section className="mb-6 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -33,9 +33,7 @@ export default function DirectivesSection({
                 {index + 1}
               </span>
               <p className="pt-1 text-sm leading-6 text-slate-700">
-                {directive.review_status === "edited"
-                  ? directive.edited_text ?? directive.text
-                  : directive.text}
+                {getReviewedText(directive)}
               </p>
             </li>
           ))}

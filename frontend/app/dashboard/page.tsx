@@ -11,8 +11,9 @@ import RequiredActionsSection from "@/components/dashboard/RequiredActionsSectio
 import TimelinesSection from "@/components/dashboard/TimelinesSection";
 import { resetSystemData } from "@/lib/apiClient";
 import {
-  filterApproved,
   getApprovedValue,
+  getReviewedText,
+  getTrustedActionPlan,
   safeParseSession,
   type VerifiedSession,
 } from "@/lib/dashboard-utils";
@@ -95,24 +96,15 @@ export default function DashboardPage() {
   const trustedFields = useMemo(
     () =>
       verifiedSession?.fields.filter(
-        (field) =>
-          field.review_status === "approved" || field.review_status === "edited",
+        (field) => field.review_status === "approved",
       ) ?? [],
     [verifiedSession],
   );
 
-  const trustedActionPlan = useMemo(() => {
-    if (!verifiedSession) {
-      return null;
-    }
-
-    return {
-      ...verifiedSession.actionPlan,
-      key_directions: filterApproved(verifiedSession.actionPlan.key_directions),
-      compliance_steps: filterApproved(verifiedSession.actionPlan.compliance_steps),
-      timelines: filterApproved(verifiedSession.actionPlan.timelines),
-    };
-  }, [verifiedSession]);
+  const trustedActionPlan = useMemo(
+    () => getTrustedActionPlan(verifiedSession?.actionPlan),
+    [verifiedSession],
+  );
 
   const trustedDirections = useMemo(
     () => trustedActionPlan?.key_directions ?? [],
@@ -167,18 +159,18 @@ export default function DashboardPage() {
 
     <h2>Court Directives</h2>
     <ol>
-      ${trustedDirections.map((item) => `<li>${item.review_status === "edited" ? item.edited_text ?? item.text : item.text}</li>`).join("") || "<li>No verified directives available.</li>"}
+      ${trustedDirections.map((item) => `<li>${getReviewedText(item)}</li>`).join("") || "<li>No verified directives available.</li>"}
     </ol>
 
     <h2>Required Actions</h2>
     <ul>
-      ${trustedCompliance.map((item) => `<li>${item.review_status === "edited" ? item.edited_text ?? item.text : item.text}</li>`).join("") || "<li>No verified compliance actions.</li>"}
+      ${trustedCompliance.map((item) => `<li>${getReviewedText(item)}</li>`).join("") || "<li>No verified compliance actions.</li>"}
     </ul>
 
     <h2>Key Timelines</h2>
     <ul>
       ${trustedTimelines.map((item) => {
-        const text = item.review_status === "edited" ? item.edited_text ?? item.text : item.text;
+        const text = getReviewedText(item);
         const suffix = item.related_step_index ? ` (Linked Action: Step ${item.related_step_index})` : "";
         return `<li>${text}${suffix}</li>`;
       }).join("") || "<li>No verified timelines extracted.</li>"}
@@ -209,14 +201,6 @@ export default function DashboardPage() {
 
   const handleReset = async (): Promise<void> => {
     if (isResetting) {
-      return;
-    }
-
-    const confirmed = window.confirm(
-      "This will delete all past backend data, clear the current browser session, and return to the landing page. Continue?",
-    );
-
-    if (!confirmed) {
       return;
     }
 

@@ -3,6 +3,7 @@ import type {
   ComplianceStep,
   KeyDirection,
   ReviewField,
+  ReviewStatus,
   TimelineEntry,
 } from "@/types";
 
@@ -25,24 +26,46 @@ export function getApprovedValue(field: ReviewField | undefined): string | null 
     : field.value;
 }
 
-export function filterApproved<T extends { review_status: string }>(
+export function filterApproved<T extends { review_status: ReviewStatus }>(
   items: T[] | undefined | null,
 ): T[] {
   if (!items) {
     return [];
   }
 
-  return items.filter(
-    (item) =>
-      item.review_status === "approved" || item.review_status === "edited",
-  );
+  return items.filter((item) => item.review_status === "approved");
+}
+
+export function filterTrusted<T extends { review_status: ReviewStatus }>(
+  items: T[] | undefined | null,
+): T[] {
+  return filterApproved(items);
+}
+
+export function getTrustedActionPlan(actionPlan: ActionPlan | undefined): ActionPlan | undefined {
+  if (!actionPlan) {
+    return undefined;
+  }
+
+  return {
+    ...actionPlan,
+    key_directions: filterTrusted(actionPlan.key_directions),
+    compliance_steps: filterTrusted(actionPlan.compliance_steps),
+    timelines: filterTrusted(actionPlan.timelines),
+  };
+}
+
+export function getReviewedText(
+  item: { review_status: ReviewStatus; edited_text?: string; text: string },
+): string {
+  return item.review_status === "approved" ? (item.edited_text ?? item.text) : item.text;
 }
 
 export function groupActionsByDepartment(
   actions: ComplianceStep[],
   departments: string[] | undefined,
 ): Array<{ department: string; actions: ComplianceStep[] }> {
-  const trustedActions = filterApproved(actions);
+  const trustedActions = filterTrusted(actions);
   if (trustedActions.length === 0) {
     return [];
   }
@@ -100,15 +123,40 @@ export function safeParseSession(rawSession: string | null): VerifiedSession | n
 }
 
 export function getTrustedDirections(actionPlan: ActionPlan | undefined): KeyDirection[] {
-  return filterApproved(actionPlan?.key_directions);
+  return filterTrusted(actionPlan?.key_directions);
 }
 
 export function getTrustedComplianceSteps(
   actionPlan: ActionPlan | undefined,
 ): ComplianceStep[] {
-  return filterApproved(actionPlan?.compliance_steps);
+  return filterTrusted(actionPlan?.compliance_steps);
 }
 
 export function getTrustedTimelines(actionPlan: ActionPlan | undefined): TimelineEntry[] {
-  return filterApproved(actionPlan?.timelines);
+  return filterTrusted(actionPlan?.timelines);
+}
+
+export function finalizeFields(fields: ReviewField[]): ReviewField[] {
+  return filterTrusted(fields).map((field) => ({
+    ...field,
+    value: field.edited_value ?? field.value,
+  }));
+}
+
+export function finalizeActionPlan(actionPlan: ActionPlan): ActionPlan {
+  return {
+    ...actionPlan,
+    key_directions: filterTrusted(actionPlan.key_directions).map((item) => ({
+      ...item,
+      text: item.edited_text ?? item.text,
+    })),
+    compliance_steps: filterTrusted(actionPlan.compliance_steps).map((item) => ({
+      ...item,
+      text: item.edited_text ?? item.text,
+    })),
+    timelines: filterTrusted(actionPlan.timelines).map((item) => ({
+      ...item,
+      text: item.edited_text ?? item.text,
+    })),
+  };
 }

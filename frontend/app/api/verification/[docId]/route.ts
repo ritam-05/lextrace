@@ -80,7 +80,7 @@ function buildFieldDecisions(fields: unknown[] | undefined): Record<string, { ap
     return {};
   }
 
-  return fields.reduce((accumulator, item) => {
+  return fields.reduce<Record<string, { approved: boolean; edited_value?: string | null }>>((accumulator, item) => {
     if (typeof item !== "object" || item === null) {
       return accumulator;
     }
@@ -117,7 +117,7 @@ function buildFieldDecisions(fields: unknown[] | undefined): Record<string, { ap
     }
 
     return accumulator;
-  }, {} as Record<string, { approved: boolean; edited_value?: string | null }>);
+  }, {});
 }
 
 function buildBackendUrl(path: string): string {
