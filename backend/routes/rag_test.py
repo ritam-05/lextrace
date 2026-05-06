@@ -3,7 +3,6 @@ import uuid
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
-import fitz  # PyMuPDF
 from fastapi import APIRouter, File, HTTPException, UploadFile
 
 from backend.database import Database
@@ -13,6 +12,7 @@ from backend.rag_engine.generator import ActionPlanGenerator
 from backend.services.arbitrator import Arbitrator
 from backend.services.operative_isolator import isolate_operative_section
 from backend.services.paragraph_segmenter import segment_pages_into_paragraphs
+from backend.services.pdf_reader import extract_pdf_text
 from backend.services.regex_extractor import extract_case_type
 from backend.services.zone_extractor import ZoneExtractor
 from backend.services.appeal_scorer import AppealScorer
@@ -66,15 +66,14 @@ async def process_judgment(file: UploadFile = File(...)):
 
     try:
         pdf_bytes = await file.read()
-        doc = fitz.open(stream=pdf_bytes, filetype="pdf")
-        pages_text = [page.get_text() for page in doc]
-        raw_text = "\n".join(pages_text)
-        doc.close()
+        pages, ocr_used, page_count = extract_pdf_text(pdf_bytes)
+        raw_text = "\n\n".join(page.text for page in pages if page.text.strip())
 
         if not raw_text.strip():
             raise HTTPException(status_code=400, detail="Could not extract readable text from the PDF. It may be a scanned image requiring OCR.")
 
         print(f"Extracted {len(raw_text)} characters of raw text.")
+        print(f"OCR fallback used: {ocr_used}")
 
         header_chunk = raw_text[:1250]
         print(" [LLM] Extracting basic metadata from the first 1000 characters...")
@@ -85,9 +84,6 @@ async def process_judgment(file: UploadFile = File(...)):
         raise HTTPException(status_code=400, detail=f"PDF Parsing Failed: {str(e)}")
 
     try:
-        from backend.services.utils import PageText
-
-        pages = [PageText(page=i + 1, text=text) for i, text in enumerate(pages_text)]
         paragraphs = segment_pages_into_paragraphs(pages)
         if not paragraphs:
             raise HTTPException(status_code=400, detail="No paragraphs extracted from PDF.")
@@ -113,9 +109,6 @@ async def process_judgment(file: UploadFile = File(...)):
         print(f"Operative section isolated: {operative_section.marker_matched}")
     except Exception as e:
         print(f"Could not isolate operative section: {e}. Using full text.")
-        from backend.services.utils import PageText
-
-        pages = [PageText(page=i + 1, text=text) for i, text in enumerate(pages_text)]
         paragraphs = pages
         operative_paragraphs = pages
         operative_text = raw_text
@@ -223,6 +216,8 @@ async def process_judgment(file: UploadFile = File(...)):
                 "document_id": document_id,
                 "filename": file.filename,
                 "extraction_type": "arbitration_result",
+                "ocr_used": ocr_used,
+                "page_count": page_count,
                 "header_metadata": header_metadata,
                 "regex_output": regex_output,
                 "rag_output": rag_output,
@@ -270,6 +265,8 @@ async def process_judgment(file: UploadFile = File(...)):
         return {
             "status": "success",
             "document_id": document_id,
+            "ocr_used": ocr_used,
+            "page_count": page_count,
             "header_metadata": header_metadata,
             "arbitration_results": arbitration_results_formatted,
             "arbitration_summary": arbitration_summary,

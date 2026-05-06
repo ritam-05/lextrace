@@ -1,6 +1,6 @@
 import fitz
 
-from backend.services.ocr import ocr_pdf_page
+from backend.services.ocr import ocr_pdf_bytes
 from backend.services.sanitizer import sanitize_text
 from backend.services.utils import (
     EmptyPDFError,
@@ -11,7 +11,7 @@ from backend.services.utils import (
 )
 
 
-MIN_DIGITAL_TEXT_CHARS = 10
+MIN_DOCUMENT_TEXT_CHARS = 10
 
 
 def _open_pdf(pdf_bytes: bytes) -> fitz.Document:
@@ -25,8 +25,9 @@ def extract_pdf_text(pdf_bytes: bytes) -> tuple[list[PageText], bool, int]:
     """
     Extract text from a PDF.
 
-    Digital text is preferred per page. If a page has little/no embedded text,
-    OCR is attempted for that page so mixed digital/scanned PDFs are handled.
+    Embedded text is attempted for the full document first. If that produces no
+    usable text, the whole PDF is OCR'd and the OCR output is returned in the
+    same page structure so downstream extraction stays unchanged.
     """
     document = _open_pdf(pdf_bytes)
     try:
@@ -37,30 +38,31 @@ def extract_pdf_text(pdf_bytes: bytes) -> tuple[list[PageText], bool, int]:
         if page_count == 0:
             raise EmptyPDFError("PDF contains no pages.")
 
-        pages: list[PageText] = []
-        ocr_used = False
+        digital_pages: list[PageText] = []
 
         for page_index in range(page_count):
             page_number = page_index + 1
             page = document.load_page(page_index)
             digital_text = sanitize_text(page.get_text("text") or "")
+            digital_pages.append(PageText(page=page_number, text=digital_text))
 
-            if len(digital_text) >= MIN_DIGITAL_TEXT_CHARS:
-                pages.append(PageText(page=page_number, text=digital_text))
-                continue
+        digital_text_length = sum(len(page.text.strip()) for page in digital_pages)
+        if digital_text_length >= MIN_DOCUMENT_TEXT_CHARS:
+            return digital_pages, False, page_count
 
-            ocr_used = True
-            try:
-                ocr_text = sanitize_text(ocr_pdf_page(pdf_bytes, page_number))
-            except OCRFailureError:
-                raise
+        try:
+            ocr_page_texts = ocr_pdf_bytes(pdf_bytes)
+        except OCRFailureError:
+            raise
 
-            best_text = ocr_text if len(ocr_text) >= len(digital_text) else digital_text
-            pages.append(PageText(page=page_number, text=best_text))
+        pages = [
+            PageText(page=index, text=sanitize_text(text))
+            for index, text in enumerate(ocr_page_texts, start=1)
+        ]
 
         if not any(page.text.strip() for page in pages):
             raise EmptyPDFError("No extractable text found in PDF.")
 
-        return pages, ocr_used, page_count
+        return pages, True, page_count
     finally:
         document.close()
