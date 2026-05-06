@@ -123,7 +123,7 @@ async def process_judgment(file: UploadFile = File(...)):
 
                 rag_output = generator.generate(context=retrieved_context, hard_facts={})
                 
-                # --- NEW HYBRID APPEAL LOGIC ---
+                # --- HYBRID APPEAL LOGIC ---
                 if "Appeal_Risk_Signals" in rag_output:
                     print("  [RAG] Calculating deterministic appeal score...")
                     appeal_evaluation = AppealScorer.evaluate(rag_output["Appeal_Risk_Signals"])

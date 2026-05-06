@@ -107,8 +107,7 @@ class ActionPlanGenerator:
                     "If immediate, write 'Forthwith / Immediate'."
                 ],
                 "Responsible_Departments": [
-                    "Extract the specific ministries, boards, or departments ordered to act.",
-                    "Exclude the petitioner unless they are a government body."
+                    "Extract the specific ministries, boards, or departments ordered to act."
                 ],
                 "Nature_of_Action": "STRICTLY choose ONE from: ['Policy Update', 'Financial Payout', 'Administrative Action', 'Operational Halt', 'Mixed']"
             }}
