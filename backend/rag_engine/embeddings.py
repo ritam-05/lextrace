@@ -70,7 +70,13 @@ class RAGService:
             raise e
         
 
-    def retrieve_context(self, semantic_query: str, keyword_query: str, top_k: int = 5) -> str:
+    def retrieve_context(
+        self,
+        semantic_query: str,
+        keyword_query: str,
+        top_k: int = 5,
+        include_sources: bool = False,
+    ):
         """
         Executes parallel Vector and BM25 searches using decoupled queries, 
         fuses them via RRF, and chronologically reconstructs parent contexts.
@@ -108,7 +114,9 @@ class RAGService:
                 "$project": {
                     "child_id": 1,
                     "parent_id": 1,
-                    "score": { "$meta": "vectorSearchScore" }
+                    "score": { "$meta": "vectorSearchScore" },
+                    "page": 1,
+                    "text": 1,
                 }
             }
         ]
@@ -134,7 +142,9 @@ class RAGService:
                 "$project": {
                     "child_id": 1,
                     "parent_id": 1,
-                    "score": { "$meta": "searchScore" }
+                    "score": { "$meta": "searchScore" },
+                    "page": 1,
+                    "text": 1,
                 }
             }
         ]
@@ -154,7 +164,9 @@ class RAGService:
             pid = res.get("parent_id")
             rrf_scores[cid] = {
                 "score": 1.0 / (k + rank + 1),
-                "parent_id": pid
+                "parent_id": pid,
+                "page": res.get("page"),
+                "text": res.get("text", ""),
             }
 
         for rank, res in enumerate(text_results):
@@ -165,7 +177,9 @@ class RAGService:
             else:
                 rrf_scores[cid] = {
                     "score": 1.0 / (k + rank + 1),
-                    "parent_id": pid
+                    "parent_id": pid,
+                    "page": res.get("page"),
+                    "text": res.get("text", ""),
                 }
 
         # Sort chunks by unified RRF score descending
@@ -182,6 +196,8 @@ class RAGService:
 
         if not distinct_parents:
             print("No relevant chunks found across both indexes.")
+            if include_sources:
+                return {"context": "", "source_pages": [], "source_chunks": []}
             return ""
 
         # ==========================================
@@ -207,6 +223,31 @@ class RAGService:
 
         context = "\n\n".join(ordered_texts)
         print(f"Reconstructed {len(ordered_texts)} parent contexts in chronological order.")
+
+        if include_sources:
+            source_chunks = []
+            source_pages = []
+
+            for cid, data in sorted_chunks[: top_k * 2]:
+                page = data.get("page")
+                source_chunks.append(
+                    {
+                        "child_id": cid,
+                        "parent_id": data.get("parent_id"),
+                        "page": page,
+                        "score": data.get("score"),
+                        "text": data.get("text", ""),
+                    }
+                )
+
+                if isinstance(page, int) and page not in source_pages:
+                    source_pages.append(page)
+
+            return {
+                "context": context,
+                "source_pages": source_pages,
+                "source_chunks": source_chunks,
+            }
 
         return context
 

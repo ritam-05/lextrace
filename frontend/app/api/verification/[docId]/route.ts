@@ -240,6 +240,71 @@ function inferTimelineStepIndex(
   return matchIndex >= 0 ? matchIndex + 1 : undefined;
 }
 
+interface RagSourceChunk {
+  page?: number | null;
+  text?: string;
+}
+
+function normalizeSourceChunks(value: unknown): RagSourceChunk[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .filter((item): item is Record<string, unknown> =>
+      typeof item === "object" && item !== null,
+    )
+    .map((item) => ({
+      page: typeof item.page === "number" ? item.page : null,
+      text: typeof item.text === "string" ? item.text : "",
+    }));
+}
+
+function normalizeSourcePages(value: unknown): number[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is number => typeof item === "number")
+    : [];
+}
+
+function getTokenSet(value: string): Set<string> {
+  return new Set(
+    normalizeForTimelineMatch(value)
+      .split(" ")
+      .filter((token) => token.length >= 4),
+  );
+}
+
+function inferRagSourcePage(
+  text: string,
+  sourceChunks: RagSourceChunk[],
+  fallbackPages: number[],
+): number | undefined {
+  const queryTokens = getTokenSet(text);
+  let bestPage: number | undefined;
+  let bestScore = 0;
+
+  for (const chunk of sourceChunks) {
+    if (typeof chunk.page !== "number" || !chunk.text) {
+      continue;
+    }
+
+    const chunkTokens = getTokenSet(chunk.text);
+    let sharedTokens = 0;
+    for (const token of queryTokens) {
+      if (chunkTokens.has(token)) {
+        sharedTokens += 1;
+      }
+    }
+
+    if (sharedTokens > bestScore) {
+      bestScore = sharedTokens;
+      bestPage = chunk.page;
+    }
+  }
+
+  return bestPage ?? fallbackPages[0];
+}
+
 function buildUploadResponse(
   docId: string,
   payload: VerificationPayload,
@@ -288,26 +353,33 @@ function buildActionPlan(payload: VerificationPayload): ActionPlan {
       Appeal_Risk_Score?: number;
       LLM_Context?: string;
     };
+    RAG_Source_Pages?: unknown;
+    RAG_Source_Chunks?: unknown;
   } | undefined;
 
   const ragExtraction = ragOutput?.Extraction ?? {};
   const ragPlan = ragOutput?.Action_Plan ?? {};
   const complianceSteps = ragPlan.Compliance_Required ?? [];
+  const sourcePages = normalizeSourcePages(ragOutput?.RAG_Source_Pages);
+  const sourceChunks = normalizeSourceChunks(ragOutput?.RAG_Source_Chunks);
 
   return {
     key_directions: (ragExtraction.Key_Directions ?? []).map((text, index) => ({
       id: `dir_${index}`,
       text,
+      source_page: inferRagSourcePage(text, sourceChunks, sourcePages),
       review_status: "unreviewed",
     })),
     compliance_steps: complianceSteps.map((text, index) => ({
       id: `comp_${index}`,
       text,
+      source_page: inferRagSourcePage(text, sourceChunks, sourcePages),
       review_status: "unreviewed",
     })),
     timelines: (ragPlan.Key_Timelines ?? []).map((text, index) => ({
       id: `tl_${index}`,
       text,
+      source_page: inferRagSourcePage(text, sourceChunks, sourcePages),
       related_step_index: inferTimelineStepIndex(text, complianceSteps),
       review_status: "unreviewed",
     })),

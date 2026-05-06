@@ -91,6 +91,7 @@ export interface ReviewField {
 export interface KeyDirection {
   id: string;
   text: string;
+  source_page?: number;
   review_status: ReviewStatus;
   edited_text?: string;
 }
@@ -99,6 +100,7 @@ export interface KeyDirection {
 export interface ComplianceStep {
   id: string;
   text: string;
+  source_page?: number;
   review_status: ReviewStatus;
   edited_text?: string;
 }
@@ -111,6 +113,7 @@ export interface ComplianceStep {
 export interface TimelineEntry {
   id: string;
   text: string;
+  source_page?: number;
   related_step_index?: number;
   review_status: ReviewStatus;
   edited_text?: string;

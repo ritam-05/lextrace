@@ -146,6 +146,8 @@ function getRiskBarTone(score: number): string {
 
 export default function ActionPlanPanel() {
   const actionPlan = useReviewStore((state) => state.actionPlan);
+  const activeFieldId = useReviewStore((state) => state.activeFieldId);
+  const setActiveField = useReviewStore((state) => state.setActiveField);
   const approveDirection = useReviewStore((state) => state.approveDirection);
   const editDirection = useReviewStore((state) => state.editDirection);
   const rejectDirection = useReviewStore((state) => state.rejectDirection);
@@ -249,7 +251,24 @@ export default function ActionPlanPanel() {
               </div>
 
               {actionPlan.key_directions.map((direction, index) => (
-                <div key={direction.id} className="mb-2 rounded-lg bg-slate-50 p-3">
+                <div
+                  key={direction.id}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => setActiveField(direction.id)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      setActiveField(direction.id);
+                    }
+                  }}
+                  className={[
+                    "mb-2 cursor-pointer rounded-lg bg-slate-50 p-3 transition",
+                    activeFieldId === direction.id
+                      ? "ring-2 ring-slate-900"
+                      : "hover:bg-slate-100",
+                  ].join(" ")}
+                >
                   <div className="flex items-start">
                     <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-slate-200 text-xs font-medium text-slate-600">
                       {index + 1}
@@ -258,6 +277,11 @@ export default function ActionPlanPanel() {
                       {direction.edited_text ?? direction.text}
                     </p>
                   </div>
+                  {direction.source_page ? (
+                    <p className="ml-7 mt-1 text-xs text-slate-500">
+                      Source: Page {direction.source_page}
+                    </p>
+                  ) : null}
                   <InlineReviewControls
                     status={direction.review_status}
                     onApprove={() => approveDirection(direction.id)}
@@ -314,7 +338,24 @@ export default function ActionPlanPanel() {
             </div>
 
             {actionPlan.compliance_steps.map((step, index) => (
-              <div key={step.id} className="mb-2 rounded-lg bg-blue-50 p-3">
+              <div
+                key={step.id}
+                role="button"
+                tabIndex={0}
+                onClick={() => setActiveField(step.id)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    setActiveField(step.id);
+                  }
+                }}
+                className={[
+                  "mb-2 cursor-pointer rounded-lg bg-blue-50 p-3 transition",
+                  activeFieldId === step.id
+                    ? "ring-2 ring-blue-700"
+                    : "hover:bg-blue-100",
+                ].join(" ")}
+              >
                 <div className="flex items-start">
                   <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-blue-200 text-xs font-medium text-blue-700">
                     {index + 1}
@@ -323,6 +364,11 @@ export default function ActionPlanPanel() {
                     {step.edited_text ?? step.text}
                   </p>
                 </div>
+                {step.source_page ? (
+                  <p className="ml-7 mt-1 text-xs text-slate-500">
+                    Source: Page {step.source_page}
+                  </p>
+                ) : null}
                 <InlineReviewControls
                   status={step.review_status}
                   onApprove={() => approveComplianceStep(step.id)}
@@ -384,7 +430,21 @@ export default function ActionPlanPanel() {
               actionPlan.timelines.map((timeline) => (
                 <div
                   key={timeline.id}
-                  className="mb-2 rounded-lg border border-blue-200 bg-blue-50 p-3"
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => setActiveField(timeline.id)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      setActiveField(timeline.id);
+                    }
+                  }}
+                  className={[
+                    "mb-2 cursor-pointer rounded-lg border border-blue-200 bg-blue-50 p-3 transition",
+                    activeFieldId === timeline.id
+                      ? "ring-2 ring-blue-700"
+                      : "hover:bg-blue-100",
+                  ].join(" ")}
                 >
                   <div className="flex items-start">
                     <svg
@@ -408,6 +468,11 @@ export default function ActionPlanPanel() {
                       </span>
                     ) : null}
                   </div>
+                  {timeline.source_page ? (
+                    <p className="ml-5 mt-1 text-xs text-slate-500">
+                      Source: Page {timeline.source_page}
+                    </p>
+                  ) : null}
                   <InlineReviewControls
                     status={timeline.review_status}
                     onApprove={() => approveTimeline(timeline.id)}

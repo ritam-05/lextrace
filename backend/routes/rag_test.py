@@ -93,8 +93,13 @@ async def process_judgment(file: UploadFile = File(...)):
             raise HTTPException(status_code=400, detail="No paragraphs extracted from PDF.")
 
         operative_section = isolate_operative_section(paragraphs)
+        operative_paragraphs = (
+            paragraphs[operative_section.start_para_index :]
+            if operative_section.detected
+            else paragraphs
+        )
         operative_text = (
-            "\n\n".join([p.text for p in paragraphs[operative_section.start_para_index :]])
+            "\n\n".join([p.text for p in operative_paragraphs])
             if operative_section.detected
             else raw_text
         )
@@ -112,6 +117,7 @@ async def process_judgment(file: UploadFile = File(...)):
 
         pages = [PageText(page=i + 1, text=text) for i, text in enumerate(pages_text)]
         paragraphs = pages
+        operative_paragraphs = pages
         operative_text = raw_text
         operative_section = None
 
@@ -138,7 +144,11 @@ async def process_judgment(file: UploadFile = File(...)):
         async def run_rag_extraction():
             try:
                 print("  [RAG] Starting semantic extraction with LLM...")
-                parent_documents, child_chunks = chunker.process_document(operative_text, document_id)
+                parent_documents, child_chunks = chunker.process_document(
+                    operative_text,
+                    document_id,
+                    source_paragraphs=operative_paragraphs,
+                )
                 rag_service.ingest_document(parent_documents, child_chunks)
 
                 semantic_query = (
@@ -152,16 +162,20 @@ async def process_judgment(file: UploadFile = File(...)):
                     "compliance strict affidavit report execution disposed decree"
                 )
 
-                retrieved_context = rag_service.retrieve_context(
+                retrieval_result = rag_service.retrieve_context(
                     semantic_query=semantic_query,
                     keyword_query=keyword_query,
                     top_k=5,
+                    include_sources=True,
                 )
+                retrieved_context = retrieval_result.get("context", "")
 
                 if not retrieved_context:
                     raise Exception("Failed to retrieve context")
 
                 rag_output = generator.generate(context=retrieved_context, hard_facts={})
+                rag_output["RAG_Source_Pages"] = retrieval_result.get("source_pages", [])
+                rag_output["RAG_Source_Chunks"] = retrieval_result.get("source_chunks", [])
                 
                 # --- NEW HYBRID APPEAL LOGIC ---
                 if "Appeal_Risk_Signals" in rag_output:

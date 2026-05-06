@@ -69,9 +69,7 @@ export default function HighlightLayer({
             }}
             className={[
               "confidence-highlight pointer-events-auto absolute rounded-sm transition-all duration-200",
-              highlight.isActive
-                ? "active shadow-[0_0_0_2px_rgba(22,101,52,0.16)]"
-                : "hover:opacity-95",
+              highlight.isActive ? "active" : "hover:opacity-95",
             ].join(" ")}
             style={{
               left: scaledRect.left,
@@ -80,9 +78,9 @@ export default function HighlightLayer({
               height: scaledRect.height,
               color: highlight.color,
               background: "transparent",
-              borderBottom: `${highlight.isActive ? 3 : 2}px solid ${highlight.color}`,
+              borderBottom: `${highlight.isActive ? 20 : 2}px solid ${highlight.color}`,
               opacity: highlight.isActive ? 1 : 0.82,
-              boxShadow: highlight.isActive ? `0 0 0 2px rgba(22,101,52,0.16)` : "none",
+              boxShadow: "none",
             }}
             aria-label={`Highlight for ${highlight.targetFieldId}`}
           />

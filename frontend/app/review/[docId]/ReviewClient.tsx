@@ -7,7 +7,7 @@ import PdfViewer from "@/components/review/PdfViewer";
 import SplitPane from "@/components/review/SplitPane";
 import SubmitBar from "@/components/review/SubmitBar";
 import { useReviewStore } from "@/store/reviewStore";
-import type { ReviewField, UploadResponse } from "@/types";
+import type { ActionPlan, ReviewField, UploadResponse } from "@/types";
 
 interface ReviewSessionPayload {
   uploadResponse: UploadResponse;
@@ -86,6 +86,47 @@ function deriveReviewFields(uploadResponse: UploadResponse): ReviewField[] {
   ];
 }
 
+function deriveActionPlanSourceFields(
+  actionPlan: ActionPlan | null,
+  defaultPage: number,
+): ReviewField[] {
+  if (!actionPlan) {
+    return [];
+  }
+
+  const defaultConfidence = 0.75;
+
+  return [
+    ...actionPlan.key_directions.map((direction, index) => ({
+      fieldId: direction.id,
+      label: `Court Directive ${index + 1}`,
+      value: direction.edited_text ?? direction.text,
+      confidence: defaultConfidence,
+      source_page: direction.source_page ?? defaultPage,
+      source_bbox: null,
+      review_status: direction.review_status,
+    })),
+    ...actionPlan.compliance_steps.map((step, index) => ({
+      fieldId: step.id,
+      label: `Required Action ${index + 1}`,
+      value: step.edited_text ?? step.text,
+      confidence: defaultConfidence,
+      source_page: step.source_page ?? defaultPage,
+      source_bbox: null,
+      review_status: step.review_status,
+    })),
+    ...actionPlan.timelines.map((timeline, index) => ({
+      fieldId: timeline.id,
+      label: `Timeline ${index + 1}`,
+      value: timeline.edited_text ?? timeline.text,
+      confidence: defaultConfidence,
+      source_page: timeline.source_page ?? defaultPage,
+      source_bbox: null,
+      review_status: timeline.review_status,
+    })),
+  ];
+}
+
 function RightPanel({
   pdfDataUrl,
   uploadResponse,
@@ -94,8 +135,20 @@ function RightPanel({
   uploadResponse: UploadResponse | null;
 }) {
   const fieldsById = useReviewStore((state) => state.fields);
+  const actionPlan = useReviewStore((state) => state.actionPlan);
   const activeFieldId = useReviewStore((state) => state.activeFieldId);
-  const fields = useMemo(() => Object.values(fieldsById), [fieldsById]);
+  const fields = useMemo(() => {
+    const reviewFields = Object.values(fieldsById);
+    const defaultPage =
+      uploadResponse?.paragraphs[0]?.page ??
+      uploadResponse?.page_texts[0]?.page ??
+      1;
+
+    return [
+      ...reviewFields,
+      ...deriveActionPlanSourceFields(actionPlan, defaultPage),
+    ];
+  }, [actionPlan, fieldsById, uploadResponse]);
 
   return (
     <div className="h-full bg-slate-100">
