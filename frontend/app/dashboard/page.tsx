@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import AppealAnalysisCard from "@/components/dashboard/AppealAnalysisCard";
 import CaseSummaryCard from "@/components/dashboard/CaseSummaryCard";
 import DashboardFooter from "@/components/dashboard/DashboardFooter";
+import DepartmentWiseView from "@/components/dashboard/DepartmentWiseView";
 import DirectivesSection from "@/components/dashboard/DirectivesSection";
 import RequiredActionsSection from "@/components/dashboard/RequiredActionsSection";
 import TimelinesSection from "@/components/dashboard/TimelinesSection";
@@ -14,6 +15,7 @@ import {
   getApprovedValue,
   getReviewedText,
   getTrustedActionPlan,
+  groupActionsByDepartment,
   safeParseSession,
   type VerifiedSession,
 } from "@/lib/dashboard-utils";
@@ -126,6 +128,12 @@ export default function DashboardPage() {
       return;
     }
 
+    const caseNumber = findFieldValue(trustedFields, ["case_number"]);
+    const groupedDepartmentActions = groupActionsByDepartment(
+      trustedCompliance,
+      trustedActionPlan?.responsible_departments ?? [],
+    );
+
     const html = `<!DOCTYPE html>
 <html>
   <head>
@@ -185,6 +193,19 @@ export default function DashboardPage() {
 
     <h2>AI Analysis Summary</h2>
     <p>${verifiedSession.actionPlan.llm_context || "No AI analysis summary provided."}</p>
+
+    <h2>Department-wise View</h2>
+    <p><strong>Judgment:</strong> ${caseNumber !== "Not available" ? caseNumber : verifiedSession.filename}</p>
+    ${
+      groupedDepartmentActions.length > 0
+        ? groupedDepartmentActions.map((group) => `
+          <h3>${group.department}</h3>
+          <ul>
+            ${group.actions.map((item) => `<li>${getReviewedText(item)}</li>`).join("") || "<li>No verified action assigned.</li>"}
+          </ul>
+        `).join("")
+        : "<p>No department-specific action has been verified for this judgment.</p>"
+    }
   </body>
 </html>`;
 
@@ -287,6 +308,13 @@ export default function DashboardPage() {
         <TimelinesSection timelines={trustedActionPlan?.timelines ?? []} />
         <AppealAnalysisCard
           appealAnalysis={verifiedSession.actionPlan.appeal_analysis}
+        />
+        <DepartmentWiseView
+          filename={verifiedSession.filename}
+          caseNumber={findFieldValue(trustedFields, ["case_number"])}
+          complianceSteps={trustedActionPlan?.compliance_steps ?? []}
+          departments={trustedActionPlan?.responsible_departments ?? []}
+          timelines={trustedActionPlan?.timelines ?? []}
         />
         <DashboardFooter verifiedAt={verifiedSession.verifiedAt} />
       </div>
