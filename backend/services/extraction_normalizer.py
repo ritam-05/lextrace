@@ -5,17 +5,19 @@ from copy import deepcopy
 from typing import Any
 
 from dotenv import load_dotenv
-from groq import Groq
+from sarvamai import SarvamAI
 
 load_dotenv()
 
 
 class ExtractionNormalizer:
     def __init__(self) -> None:
-        api_key = os.getenv("GROQ_API_KEY")
-        self.client = Groq(api_key=api_key) if api_key else None
-        self.model = "llama-3.1-8b-instant"
+        api_key = os.getenv("SARVAM_API_KEY")
+        if not api_key:
+            raise ValueError(" SARVAM_API_KEY missing from .env file.")
 
+        self.client = SarvamAI(api_subscription_key=api_key)
+        self.model = "sarvam-30b"
     def normalize(
         self,
         extracted: dict[str, Any],
@@ -60,10 +62,10 @@ Return only valid JSON in this shape:
 """
 
         try:
-            response = self.client.chat.completions.create(
+            response = self.client.chat.completions(
                 messages=[{"role": "user", "content": prompt}],
                 model=self.model,
-                response_format={"type": "json_object"},
+                top_p=1,
                 temperature=0.0,
             )
             payload = json.loads(response.choices[0].message.content)

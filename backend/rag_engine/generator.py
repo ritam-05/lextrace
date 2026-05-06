@@ -2,19 +2,19 @@ import json
 import os
 
 from dotenv import load_dotenv
-from groq import Groq
+from sarvamai import SarvamAI
 
 load_dotenv()
 
 
 class ActionPlanGenerator:
     def __init__(self):
-        api_key = os.getenv("GROQ_API_KEY")
+        api_key = os.getenv("SARVAM_API_KEY")
         if not api_key:
-            raise ValueError(" GROQ_API_KEY missing from .env file.")
+            raise ValueError(" SARVAM_API_KEY missing from .env file.")
 
-        self.client = Groq(api_key=api_key)
-        self.model = "llama-3.1-8b-instant"
+        self.client = SarvamAI(api_subscription_key=api_key)
+        self.model = "sarvam-30b"
 
     def extract_basic_metadata(self, text_chunk: str) -> dict:
         """
@@ -48,10 +48,10 @@ class ActionPlanGenerator:
         """
 
         try:
-            response = self.client.chat.completions.create(
+            response = self.client.chat.completions(
                 messages=[{"role": "user", "content": prompt}],
                 model=self.model,
-                response_format={"type": "json_object"},
+                top_p=1,
                 temperature=0.0,
             )
             return json.loads(response.choices[0].message.content)
@@ -117,10 +117,10 @@ class ActionPlanGenerator:
         print(" Transmitting context to Groq LLM for comprehensive extraction...")
 
         try:
-            response = self.client.chat.completions.create(
+            response = self.client.chat.completions(
                 messages=[{"role": "user", "content": prompt}],
                 model=self.model,
-                response_format={"type": "json_object"},
+                top_p=1,
                 temperature=0.0,
             )
 
@@ -157,12 +157,12 @@ class ActionPlanGenerator:
             "Reasoning": "1-2 sentences explaining the outcome and impact."
         }}
         """
-        response = self.client.chat.completions.create(
-            messages=[{"role": "user", "content": prompt}],
-            model=self.model,
-            response_format={"type": "json_object"},
-            temperature=0.0,
-        )
+        response = self.client.chat.completions(
+                messages=[{"role": "user", "content": prompt}],
+                model=self.model,
+                top_p=1,
+                temperature=0.0,
+            )
         return json.loads(response.choices[0].message.content)
     
     def generate(self, context: str, hard_facts: dict = None) -> dict:
