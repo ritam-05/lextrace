@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 
-import ConfidenceBadge from "@/components/review/ConfidenceBadge";
 import { getConfidenceTier } from "@/lib/confidenceColor";
 import { useReviewStore } from "@/store/reviewStore";
 import type { ReviewField } from "@/types";
@@ -14,7 +13,31 @@ interface FieldCardProps {
   registerRef?: (element: HTMLDivElement | null) => void;
 }
 
-function getCardTone(field: ReviewField, isActive: boolean, isEditing: boolean): string {
+function needsReverification(value: string | null | undefined): boolean {
+  if (!value) {
+    return true;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  return [
+    "",
+    "not available",
+    "not shown",
+    "not specified",
+    "n/a",
+    "na",
+    "none",
+    "null",
+    "-",
+    "—",
+  ].includes(normalized);
+}
+
+function getCardTone(
+  field: ReviewField,
+  isActive: boolean,
+  isEditing: boolean,
+): string {
   if (isEditing) {
     return "border-blue-500 shadow-[0_0_0_3px_rgba(59,130,246,0.12)]";
   }
@@ -29,6 +52,12 @@ function getCardTone(field: ReviewField, isActive: boolean, isEditing: boolean):
     return isActive
       ? "border-rose-400 bg-rose-50/60 shadow-[0_0_0_3px_rgba(244,63,94,0.08)]"
       : "border-rose-300 bg-rose-50/40";
+  }
+
+  if (field.review_status === "edited") {
+    return isActive
+      ? "border-blue-500 shadow-[0_0_0_3px_rgba(59,130,246,0.12)]"
+      : "border-blue-300 bg-blue-50/40";
   }
 
   if (isActive) {
@@ -67,6 +96,10 @@ export default function FieldCard({
   }, [field.edited_value, field.value, isEditing]);
 
   const currentValue = field.edited_value ?? field.value;
+  const shouldShowReverify = needsReverification(currentValue);
+  const showApproveRejectActions =
+    field.review_status === "unreviewed" || field.review_status === "edited";
+  const showEditAfterReject = field.review_status === "rejected";
 
   return (
     <div
@@ -145,14 +178,24 @@ export default function FieldCard({
             </p>
             {field.review_status === "approved" ? (
               <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
-                ✓ Approved
+                Approved
               </span>
             ) : field.review_status === "rejected" ? (
               <span className="rounded-full border border-rose-200 bg-rose-50 px-3 py-1 text-xs font-semibold text-rose-700">
-                ✗ Unverifiable
+                Rejected
+              </span>
+            ) : field.review_status === "edited" ? (
+              <span className="rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
+                Edited
+              </span>
+            ) : shouldShowReverify ? (
+              <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700">
+                Please reverify
               </span>
             ) : (
-              <ConfidenceBadge score={field.confidence} />
+              <span className="text-xs font-medium text-slate-400">
+                &nbsp;
+              </span>
             )}
           </div>
 
@@ -160,17 +203,17 @@ export default function FieldCard({
             <p
               className={[
                 "text-base font-medium",
-                field.review_status === "rejected" ? "text-slate-400" : "text-slate-900",
+                field.review_status === "rejected" ? "text-slate-500" : "text-slate-900",
               ].join(" ")}
             >
-              {field.review_status === "rejected" ? "—" : currentValue ?? "Not available"}
+              {currentValue ?? "Not available"}
             </p>
-            {field.review_status !== "approved" && field.review_status !== "rejected" ? (
+            {field.review_status !== "approved" ? (
               <p className="text-xs text-slate-500">Source: Page {field.source_page}</p>
             ) : null}
           </div>
 
-          {field.review_status === "unreviewed" || field.review_status === "edited" ? (
+          {showApproveRejectActions ? (
             <div className="flex items-center justify-end gap-2">
               <button
                 type="button"
@@ -180,18 +223,7 @@ export default function FieldCard({
                 }}
                 className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-100"
               >
-                ✓ Approve
-              </button>
-              <button
-                type="button"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  setDraftValue(field.edited_value ?? field.value ?? "");
-                  setIsEditing(true);
-                }}
-                className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-sm font-semibold text-blue-700 transition hover:bg-blue-100"
-              >
-                ✎ Edit
+                Approve
               </button>
               <button
                 type="button"
@@ -201,7 +233,23 @@ export default function FieldCard({
                 }}
                 className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-1.5 text-sm font-semibold text-rose-700 transition hover:bg-rose-100"
               >
-                ✗ Reject
+                Reject
+              </button>
+            </div>
+          ) : null}
+
+          {showEditAfterReject ? (
+            <div className="flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setDraftValue(field.edited_value ?? field.value ?? "");
+                  setIsEditing(true);
+                }}
+                className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-sm font-semibold text-blue-700 transition hover:bg-blue-100"
+              >
+                Edit
               </button>
             </div>
           ) : null}

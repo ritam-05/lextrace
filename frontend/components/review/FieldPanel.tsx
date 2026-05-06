@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef } from "react";
 
 import ActionPlanPanel from "@/components/review/ActionPlanPanel";
 import FieldCard from "@/components/review/FieldCard";
@@ -26,35 +26,30 @@ function formatTimestamp(value: string | null): string {
     return "Session";
   }
 
-  return [
-    parsed.getUTCFullYear(),
-    pad(parsed.getUTCMonth() + 1),
-    pad(parsed.getUTCDate()),
-  ].join("-") +
-    " " +
-    [pad(parsed.getUTCHours()), pad(parsed.getUTCMinutes())].join(":") +
-    " UTC";
+  const formatter = new Intl.DateTimeFormat("en-IN", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+
+  const parts = formatter.formatToParts(parsed);
+  const valueByType = (type: Intl.DateTimeFormatPartTypes): string =>
+    parts.find((part) => part.type === type)?.value ?? "";
+
+  return `${valueByType("year")}-${valueByType("month")}-${valueByType("day")} ${valueByType("hour")}:${valueByType("minute")} IST`;
 }
 
 export default function FieldPanel({ docId, uploadedAt }: FieldPanelProps) {
   const fieldsById = useReviewStore((state) => state.fields);
   const activeFieldId = useReviewStore((state) => state.activeFieldId);
   const setActiveField = useReviewStore((state) => state.setActiveField);
-
-  const [flaggedOnly, setFlaggedOnly] = useState(false);
   const cardRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   const fields = useMemo(() => Object.values(fieldsById), [fieldsById]);
-
-  const displayedFields = useMemo(() => {
-    if (!flaggedOnly) {
-      return fields;
-    }
-
-    return fields.filter(
-      (field) => field.confidence < 0.85 || field.review_status === "unreviewed",
-    );
-  }, [fields, flaggedOnly]);
 
   useEffect(() => {
     if (!activeFieldId) {
@@ -76,7 +71,7 @@ export default function FieldPanel({ docId, uploadedAt }: FieldPanelProps) {
               Review Session
             </p>
             <h1 className="mt-2 text-2xl font-semibold tracking-tight text-slate-900">
-              Extracted Data Review
+              Case Details
             </h1>
             <p className="mt-1 text-sm text-slate-500">
               Document ID: <span className="font-mono">{docId}</span>
@@ -91,37 +86,6 @@ export default function FieldPanel({ docId, uploadedAt }: FieldPanelProps) {
         <div className="mt-5">
           <ProgressBar />
         </div>
-
-        <div className="mt-5 flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => {
-              setFlaggedOnly(false);
-            }}
-            className={[
-              "rounded-full px-3 py-1.5 text-sm font-medium transition",
-              !flaggedOnly
-                ? "bg-slate-900 text-white"
-                : "border border-slate-200 bg-white text-slate-600 hover:border-slate-300",
-            ].join(" ")}
-          >
-            All
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setFlaggedOnly(true);
-            }}
-            className={[
-              "rounded-full px-3 py-1.5 text-sm font-medium transition",
-              flaggedOnly
-                ? "bg-amber-500 text-white"
-                : "border border-slate-200 bg-white text-slate-600 hover:border-slate-300",
-            ].join(" ")}
-          >
-            Flagged only
-          </button>
-        </div>
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6">
@@ -131,12 +95,12 @@ export default function FieldPanel({ docId, uploadedAt }: FieldPanelProps) {
               Extracted Fields
             </h2>
             <span className="text-xs text-slate-400">
-              {displayedFields.length} shown
+              {fields.length} shown
             </span>
           </div>
 
           <div className="space-y-3">
-            {displayedFields.map((field) => (
+            {fields.map((field) => (
               <FieldCard
                 key={field.fieldId}
                 field={field}

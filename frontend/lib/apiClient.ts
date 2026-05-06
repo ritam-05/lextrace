@@ -147,3 +147,9 @@ export async function updateActionStatus(
     },
   );
 }
+
+export async function resetSystemData(): Promise<void> {
+  await request<void>("/api/system/reset", {
+    method: "POST",
+  });
+}

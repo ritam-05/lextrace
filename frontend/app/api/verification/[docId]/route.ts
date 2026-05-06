@@ -75,6 +75,51 @@ interface VerificationRequestBody {
   action_plan?: unknown;
 }
 
+function buildFieldDecisions(fields: unknown[] | undefined): Record<string, { approved: boolean; edited_value?: string | null }> {
+  if (!Array.isArray(fields)) {
+    return {};
+  }
+
+  return fields.reduce<Record<string, { approved: boolean; edited_value?: string | null }>>((accumulator, item) => {
+    if (typeof item !== "object" || item === null) {
+      return accumulator;
+    }
+
+    const field = item as {
+      fieldId?: unknown;
+      review_status?: unknown;
+      edited_value?: unknown;
+      value?: unknown;
+    };
+
+    if (typeof field.fieldId !== "string") {
+      return accumulator;
+    }
+
+    const status = typeof field.review_status === "string" ? field.review_status : "";
+    const editedValue =
+      typeof field.edited_value === "string"
+        ? field.edited_value
+        : typeof field.value === "string"
+          ? field.value
+          : null;
+
+    if (status === "approved" || status === "edited") {
+      accumulator[field.fieldId] = {
+        approved: true,
+        edited_value: editedValue,
+      };
+    } else if (status === "rejected") {
+      accumulator[field.fieldId] = {
+        approved: false,
+        edited_value: editedValue,
+      };
+    }
+
+    return accumulator;
+  }, {});
+}
+
 function buildBackendUrl(path: string): string {
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
   if (FASTAPI_BASE_URL.endsWith("/api")) {
@@ -354,7 +399,7 @@ export async function POST(
     }
 
     const upstreamPayload = {
-      field_decisions: {},
+      field_decisions: buildFieldDecisions(payload.fields),
       reviewed_by: payload.reviewer,
       notes: "",
     };

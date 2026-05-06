@@ -11,7 +11,7 @@ export default function ProgressBar() {
     const fields = Object.values(fieldsById);
     const total = fields.length;
     const verified = fields.filter(
-      (field) => field.review_status !== "unreviewed",
+      (field) => field.review_status === "approved" || field.review_status === "edited",
     ).length;
     const percent = total > 0 ? (verified / total) * 100 : 0;
 

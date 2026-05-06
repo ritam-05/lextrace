@@ -9,6 +9,7 @@ export default function HomePage() {
   const [uploadError, setUploadError] = useState<string | null>(null);
 
   useEffect(() => {
+    window.sessionStorage.removeItem("lextrace_verified");
     window.sessionStorage.removeItem("lextrace_session");
     window.sessionStorage.removeItem("lextrace_pdf_file");
   }, []);
@@ -66,7 +67,7 @@ export default function HomePage() {
       </section>
 
       <footer className="fixed bottom-0 left-0 right-0 text-center text-xs text-slate-400 py-3 bg-slate-50 border-t border-slate-100">
-        For official government use only · LeXTrace MVP
+        For official government use only · LeXTrace MVP · Made by team Straw Hats
       </footer>
     </main>
   );
