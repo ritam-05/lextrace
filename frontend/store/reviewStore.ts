@@ -345,7 +345,7 @@ export const useReviewStore = create<ReviewStore>((set, get) => ({
   verifiedCount: () => {
     const state = get();
     const verifiedFields = Object.values(state.fields).filter(
-      (field) => field.review_status === "approved",
+      isVerifiedItem,
     ).length;
 
     return verifiedFields + countReviewed(state.actionPlan);

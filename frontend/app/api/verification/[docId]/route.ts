@@ -97,17 +97,18 @@ function buildFieldDecisions(fields: unknown[] | undefined): Record<string, { ap
     }
 
     const status = typeof field.review_status === "string" ? field.review_status : "";
-    const editedValue =
-      typeof field.edited_value === "string"
-        ? field.edited_value
-        : typeof field.value === "string"
-          ? field.value
-          : null;
+    const editedValue = typeof field.edited_value === "string" ? field.edited_value : null;
+    const fallbackValue = typeof field.value === "string" ? field.value : null;
 
-    if (status === "approved" || status === "edited") {
+    if (status === "approved") {
       accumulator[field.fieldId] = {
         approved: true,
-        edited_value: editedValue,
+        edited_value: null,
+      };
+    } else if (status === "edited") {
+      accumulator[field.fieldId] = {
+        approved: true,
+        edited_value: editedValue ?? fallbackValue,
       };
     } else if (status === "rejected") {
       accumulator[field.fieldId] = {

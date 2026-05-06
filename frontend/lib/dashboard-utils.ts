@@ -33,7 +33,9 @@ export function filterApproved<T extends { review_status: ReviewStatus }>(
     return [];
   }
 
-  return items.filter((item) => item.review_status === "approved");
+  return items.filter(
+    (item) => item.review_status === "approved" || item.review_status === "edited",
+  );
 }
 
 export function filterTrusted<T extends { review_status: ReviewStatus }>(

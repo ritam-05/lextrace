@@ -16,6 +16,23 @@ interface SubmitBarProps {
   docId: string;
 }
 
+function getSubmitErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "message" in error &&
+    typeof error.message === "string"
+  ) {
+    return error.message;
+  }
+
+  return "Verification could not be submitted.";
+}
+
 export default function SubmitBar({ docId }: SubmitBarProps) {
   const router = useRouter();
   const fieldsById = useReviewStore((state) => state.fields);
@@ -72,11 +89,7 @@ export default function SubmitBar({ docId }: SubmitBarProps) {
 
       router.push("/dashboard");
     } catch (error) {
-      setErrorMessage(
-        error instanceof Error
-          ? error.message
-          : "Verification could not be submitted.",
-      );
+      setErrorMessage(getSubmitErrorMessage(error));
     } finally {
       setIsSubmitting(false);
     }

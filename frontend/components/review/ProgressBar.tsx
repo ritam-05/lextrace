@@ -5,19 +5,17 @@ import { useMemo } from "react";
 import { useReviewStore } from "@/store/reviewStore";
 
 export default function ProgressBar() {
-  const fieldsById = useReviewStore((state) => state.fields);
+  const totalCount = useReviewStore((state) => state.totalCount);
+  const verifiedCount = useReviewStore((state) => state.verifiedCount);
 
-  const { totalFields, verifiedCount, progressPercent, toneClass } = useMemo(() => {
-    const fields = Object.values(fieldsById);
-    const total = fields.length;
-    const verified = fields.filter(
-      (field) => field.review_status === "approved" || field.review_status === "edited",
-    ).length;
+  const { totalItems, reviewedItems, progressPercent, toneClass } = useMemo(() => {
+    const total = totalCount();
+    const verified = verifiedCount();
     const percent = total > 0 ? (verified / total) * 100 : 0;
 
     return {
-      totalFields: total,
-      verifiedCount: verified,
+      totalItems: total,
+      reviewedItems: verified,
       progressPercent: percent,
       toneClass:
         percent >= 100
@@ -26,13 +24,13 @@ export default function ProgressBar() {
             ? "bg-amber-500"
             : "bg-rose-500",
     };
-  }, [fieldsById]);
+  }, [totalCount, verifiedCount]);
 
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between gap-3">
         <p className="text-sm font-medium text-slate-700">
-          {verifiedCount} of {totalFields} fields verified
+          {reviewedItems} of {totalItems} items verified
         </p>
         <p className="text-xs text-slate-500">
           {Math.round(progressPercent)}%
