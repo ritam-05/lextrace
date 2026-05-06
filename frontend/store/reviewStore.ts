@@ -40,7 +40,7 @@ function countReviewed(plan: ActionPlan | null): number {
     ...plan.key_directions,
     ...plan.compliance_steps,
     ...plan.timelines,
-  ].filter((item) => item.review_status !== "unreviewed").length;
+  ].filter((item) => item.review_status === "approved").length;
 }
 
 function countActionItems(plan: ActionPlan | null): number {
@@ -341,7 +341,7 @@ export const useReviewStore = create<ReviewStore>((set, get) => ({
   verifiedCount: () => {
     const state = get();
     const verifiedFields = Object.values(state.fields).filter(
-      (field) => field.review_status !== "unreviewed",
+      (field) => field.review_status === "approved",
     ).length;
 
     return verifiedFields + countReviewed(state.actionPlan);

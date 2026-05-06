@@ -31,6 +31,10 @@ function InlineReviewControls({
     }
   }, [editedText, isEditing, originalText]);
 
+  const showApproveRejectActions =
+    status === "unreviewed" || status === "edited";
+  const showEditAfterReject = status === "rejected";
+
   if (isEditing) {
     return (
       <div className="mt-2">
@@ -68,37 +72,42 @@ function InlineReviewControls({
     );
   }
 
-  if (status !== "unreviewed" && status !== "edited") {
-    return null;
-  }
-
   return (
-    <div className="mt-2 flex justify-end gap-1.5">
-      <button
-        type="button"
-        onClick={onApprove}
-        className="rounded-md border border-green-300 px-2 py-1 text-xs text-green-700 transition-colors hover:bg-green-50"
-      >
-        Approve
-      </button>
-      <button
-        type="button"
-        onClick={() => {
-          setDraftText(editedText ?? originalText);
-          setIsEditing(true);
-        }}
-        className="rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-600 transition-colors hover:bg-slate-50"
-      >
-        Edit
-      </button>
-      <button
-        type="button"
-        onClick={onReject}
-        className="rounded-md border border-red-300 px-2 py-1 text-xs text-red-600 transition-colors hover:bg-red-50"
-      >
-        Reject
-      </button>
-    </div>
+    <>
+      {showApproveRejectActions ? (
+        <div className="mt-2 flex justify-end gap-1.5">
+          <button
+            type="button"
+            onClick={onApprove}
+            className="rounded-md border border-green-300 px-2 py-1 text-xs text-green-700 transition-colors hover:bg-green-50"
+          >
+            Approve
+          </button>
+          <button
+            type="button"
+            onClick={onReject}
+            className="rounded-md border border-red-300 px-2 py-1 text-xs text-red-600 transition-colors hover:bg-red-50"
+          >
+            Reject
+          </button>
+        </div>
+      ) : null}
+
+      {showEditAfterReject ? (
+        <div className="mt-2 flex justify-end gap-1.5">
+          <button
+            type="button"
+            onClick={() => {
+              setDraftText(editedText ?? originalText);
+              setIsEditing(true);
+            }}
+            className="rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-600 transition-colors hover:bg-slate-50"
+          >
+            Edit
+          </button>
+        </div>
+      ) : null}
+    </>
   );
 }
 
@@ -171,7 +180,7 @@ export default function ActionPlanPanel() {
       ...actionPlan.key_directions,
       ...actionPlan.compliance_steps,
       ...actionPlan.timelines,
-    ].filter((item) => item.review_status !== "unreviewed").length;
+    ].filter((item) => item.review_status === "approved").length;
   }, [actionPlan]);
 
   return (
@@ -184,7 +193,7 @@ export default function ActionPlanPanel() {
         className="flex w-full cursor-pointer items-center justify-between py-1 text-left select-none"
       >
         <span className="text-sm font-semibold text-slate-700">
-          AI Action Plan
+          Action Plan
         </span>
         <div className="flex items-center gap-2">
           <span
@@ -333,7 +342,7 @@ export default function ActionPlanPanel() {
                 fill="none"
                 stroke="currentColor"
                 strokeWidth="2"
-                className="text-amber-500"
+                className="text-blue-500"
               >
                 <circle cx="12" cy="12" r="10" />
                 <polyline points="12 6 12 12 16 14" />
@@ -343,7 +352,7 @@ export default function ActionPlanPanel() {
               </h3>
             </div>
 
-            <div className="mb-2 flex items-start gap-1 rounded border border-amber-200 bg-amber-50 p-2">
+            <div className="mb-2 flex items-start gap-1 rounded border border-blue-200 bg-blue-50 p-2">
               <svg
                 width="12"
                 height="12"
@@ -351,21 +360,21 @@ export default function ActionPlanPanel() {
                 fill="none"
                 stroke="currentColor"
                 strokeWidth="2"
-                className="mt-0.5 shrink-0 text-amber-500"
+                className="mt-0.5 shrink-0 text-blue-500"
               >
                 <circle cx="12" cy="12" r="10" />
                 <line x1="12" y1="8" x2="12" y2="12" />
                 <line x1="12" y1="16" x2="12.01" y2="16" />
               </svg>
-              <p className="text-xs italic text-amber-700">
+              <p className="text-xs italic text-blue-700">
                 These timelines apply to the judgment as a whole, not to any
                 specific action step.
               </p>
             </div>
 
             {actionPlan.timelines.length === 0 ? (
-              <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
-                <p className="text-xs italic text-amber-600">
+              <div className="rounded-lg border border-blue-200 bg-blue-50 p-3">
+                <p className="text-xs italic text-blue-600">
                   No specific timelines mentioned.
                 </p>
               </div>
@@ -373,7 +382,7 @@ export default function ActionPlanPanel() {
               actionPlan.timelines.map((timeline) => (
                 <div
                   key={timeline.id}
-                  className="mb-2 rounded-lg border border-amber-200 bg-amber-50 p-3"
+                  className="mb-2 rounded-lg border border-blue-200 bg-blue-50 p-3"
                 >
                   <div className="flex items-start">
                     <svg
@@ -383,7 +392,7 @@ export default function ActionPlanPanel() {
                       fill="none"
                       stroke="currentColor"
                       strokeWidth="2"
-                      className="mt-1 shrink-0 text-amber-400"
+                      className="mt-1 shrink-0 text-blue-400"
                     >
                       <circle cx="12" cy="12" r="10" />
                       <polyline points="12 6 12 12 16 14" />
@@ -392,7 +401,7 @@ export default function ActionPlanPanel() {
                       {timeline.edited_text ?? timeline.text}
                     </p>
                     {timeline.related_step_index ? (
-                      <span className="ml-2 rounded-full bg-white/70 px-2 py-0.5 text-xs text-amber-700">
+                      <span className="ml-2 rounded-full bg-white/70 px-2 py-0.5 text-xs text-blue-700">
                         Step {timeline.related_step_index}
                       </span>
                     ) : null}

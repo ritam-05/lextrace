@@ -10,9 +10,7 @@ export default function ProgressBar() {
   const { totalFields, verifiedCount, progressPercent, toneClass } = useMemo(() => {
     const fields = Object.values(fieldsById);
     const total = fields.length;
-    const verified = fields.filter(
-      (field) => field.review_status !== "unreviewed",
-    ).length;
+    const verified = fields.filter((field) => field.review_status === "approved").length;
     const percent = total > 0 ? (verified / total) * 100 : 0;
 
     return {
