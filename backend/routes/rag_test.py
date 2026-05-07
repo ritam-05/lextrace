@@ -317,17 +317,8 @@ async def process_judgment(file: UploadFile = File(...)):
         if not paragraphs:
             raise HTTPException(status_code=400, detail="No paragraphs extracted from PDF.")
 
-        # operative_section = isolate_operative_section(paragraphs)
-        operative_paragraphs = (
-            paragraphs[operative_section.start_para_index :]
-            if operative_section.detected
-            else paragraphs
-        )
-        # operative_text = (
-        #     "\n\n".join([p.text for p in operative_paragraphs])
-        #     if operative_section.detected
-        #     else raw_text
-        # )
+        operative_section = None
+        operative_paragraphs = paragraphs
         operative_text = raw_text
 
         if _is_missing_judge_name(header_metadata.get("Name_of_the_judge")):
@@ -336,7 +327,7 @@ async def process_judgment(file: UploadFile = File(...)):
                 header_metadata["Name_of_the_judge"] = fallback_judge_name
                 print(f" [REGEX] Judge name fallback from last page: {fallback_judge_name}")
 
-        print(f"Operative section isolated: {operative_section.marker_matched}")
+        print("Operative section isolation skipped; using full document text.")
     except Exception as e:
         print(f"Could not isolate operative section: {e}. Using full text.")
         paragraphs = pages
@@ -371,6 +362,13 @@ async def process_judgment(file: UploadFile = File(...)):
                     operative_text,
                     document_id,
                     source_paragraphs=operative_paragraphs,
+                )
+                print(
+                    "  [RAG] Chunking summary: "
+                    f"text_chars={len(operative_text)} "
+                    f"source_paragraphs={len(operative_paragraphs)} "
+                    f"parents={len(parent_documents)} "
+                    f"children={len(child_chunks)}"
                 )
                 rag_service.ingest_document(parent_documents, child_chunks)
 
