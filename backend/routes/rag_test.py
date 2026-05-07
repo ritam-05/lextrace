@@ -323,11 +323,7 @@ async def process_judgment(file: UploadFile = File(...)):
             if operative_section.detected
             else paragraphs
         )
-        operative_text = (
-            "\n\n".join([p.text for p in operative_paragraphs])
-            if operative_section.detected
-            else raw_text
-        )
+        operative_text = raw_text
 
         if _is_missing_judge_name(header_metadata.get("Name_of_the_judge")):
             fallback_judge_name = _fallback_judge_name_from_last_page(paragraphs)
