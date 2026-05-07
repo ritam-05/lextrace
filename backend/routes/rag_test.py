@@ -51,14 +51,48 @@ def _retrieval_depth(page_count: int) -> int:
 
 
 def _tail_page_limit(page_count: int) -> int:
-    """Include more final pages for long judgments without flooding the LLM."""
-    if page_count >= 100:
-        return 12
-    if page_count >= 70:
-        return 10
-    if page_count >= 30:
-        return 8
-    return 4
+    """Prioritize final pages for directive extraction, capped at 6 pages."""
+    # Always focus on final 5-6 pages for court directives
+    return 6
+
+
+def _extract_final_pages_context_only(paragraphs: list, page_count: int) -> str:
+    """
+    For large documents, extract ONLY the actual final 6 pages of the PDF as primary context for directive extraction.
+    This bypasses RAG retrieval and focuses the LLM on where court orders typically appear (final operative section).
+    """
+    if page_count < 30:
+        return ""
+    
+    # Calculate the actual final 6 pages based on total page_count, not based on what's in paragraphs
+    actual_final_pages = set(range(max(1, page_count - 5), page_count + 1))
+    
+    final_pages_paragraphs = [
+        paragraph for paragraph in paragraphs
+        if getattr(paragraph, "page", None) in actual_final_pages
+    ]
+    
+    if not final_pages_paragraphs:
+        return ""
+    
+    # Format final pages with clear page markers
+    parts = []
+    current_page = None
+    for paragraph in final_pages_paragraphs:
+        text = getattr(paragraph, "text", "").strip()
+        page = getattr(paragraph, "page", None)
+        
+        if not text:
+            continue
+        
+        if page != current_page:
+            parts.append(f"\n[PAGE {page}]\n")
+            current_page = page
+        
+        parts.append(text)
+        parts.append("\n")
+    
+    return "".join(parts).strip()
 
 
 def _format_paragraph_context(paragraphs: list, max_chars: int) -> str:
@@ -163,11 +197,19 @@ def _build_large_document_context(
     Retrieval alone can miss later directions when the operative portion spans
     multiple pages, while tail pages alone can miss departments named nearby.
     """
+    sections = []
+
+    final_pages = _final_pages_context(operative_paragraphs, page_count)
+    if final_pages:
+        sections.append(f"[Final order pages - primary source for court directives]\n{final_pages}")
+
     if page_count < 30:
-        return retrieved_context
+        if retrieved_context.strip():
+            sections.append(f"[Earlier retrieved context - use only for resolving names/details]\n{retrieved_context.strip()}")
+        combined = "\n\n---\n\n".join(section for section in sections if section.strip())
+        return combined[:28000]
 
     directive_focus = _directive_focus_context(operative_paragraphs, page_count)
-    sections = []
     if directive_focus:
         sections.append(f"[Directive-focused operative paragraphs]\n{directive_focus}")
 
@@ -177,10 +219,6 @@ def _build_large_document_context(
     source_window = _source_page_window_context(operative_paragraphs, source_pages)
     if source_window:
         sections.append(f"[Pages around retrieved evidence]\n{source_window}")
-
-    final_pages = _final_pages_context(operative_paragraphs, page_count)
-    if final_pages:
-        sections.append(f"[Final operative pages]\n{final_pages}")
 
     combined = "\n\n---\n\n".join(section for section in sections if section.strip())
     return combined[:28000]
@@ -372,6 +410,11 @@ async def process_judgment(file: UploadFile = File(...)):
                 )
                 rag_service.ingest_document(parent_documents, child_chunks)
 
+                if page_count >= 30:
+                    print(f"  [RAG] Large document detected ({page_count} pages): prioritizing final pages and retrieving supporting chunks")
+                else:
+                    print(f"  [RAG] Small document detected ({page_count} pages): using standard RAG retrieval")
+
                 semantic_query = (
                     "What are the final operational directives, orders, deadlines issued by the court, "
                     "and which specific departments are instructed to take action?"
@@ -396,47 +439,83 @@ async def process_judgment(file: UploadFile = File(...)):
                 source_pages = retrieval_result.get("source_pages", [])
 
                 if not retrieved_context:
-                    raise Exception("Failed to retrieve context")
+                    if page_count >= 30:
+                        print("  [RAG] Retrieved context was empty; falling back to final pages only")
+                        retrieved_context = ""
+                    else:
+                        raise Exception("Failed to retrieve context")
 
-                extraction_context = _build_large_document_context(
-                    retrieved_context=retrieved_context,
-                    operative_paragraphs=operative_paragraphs,
-                    source_pages=source_pages,
-                    page_count=page_count,
-                )
-                print(
-                    "  [RAG] Extraction context prepared: "
-                    f"{len(extraction_context)} chars from {len(source_pages)} source pages"
-                )
+                if page_count >= 30:
+                    final_pages_context = _extract_final_pages_context_only(
+                        operative_paragraphs,
+                        page_count,
+                    )
+                    sections = []
+                    if final_pages_context:
+                        sections.append(f"[Final order pages - primary source for court directives]\n{final_pages_context}")
+                    if retrieved_context.strip():
+                        sections.append(f"[Retrieved directive/deadline passages - supporting compliance context]\n{retrieved_context.strip()}")
+                    source_window = _source_page_window_context(operative_paragraphs, source_pages)
+                    if source_window:
+                        sections.append(f"[Pages around retrieved evidence]\n{source_window}")
 
-                rag_output = generator.generate(context=extraction_context, hard_facts={})
-                rag_output["RAG_Source_Pages"] = _large_document_source_pages(
-                    source_pages,
-                    operative_paragraphs,
-                    page_count,
-                )
-                rag_output["RAG_Source_Chunks"] = _large_document_source_chunks(
-                    retrieval_result.get("source_chunks", []),
-                    operative_paragraphs,
-                    page_count,
-                )
+                    extraction_context = "\n\n---\n\n".join(section for section in sections if section.strip())[:28000]
+                    print(
+                        "  [RAG] Extraction context prepared: "
+                        f"{len(extraction_context)} chars from {len(source_pages)} source pages"
+                    )
+                    rag_output = generator.generate(context=extraction_context, hard_facts={})
+                    final_page_numbers = sorted({getattr(p, "page", None) for p in operative_paragraphs})
+                    final_page_numbers = [p for p in final_page_numbers if isinstance(p, int)]
+                    rag_output["RAG_Source_Pages"] = _large_document_source_pages(
+                        source_pages,
+                        operative_paragraphs,
+                        page_count,
+                    )
+                    rag_output["RAG_Source_Chunks"] = _large_document_source_chunks(
+                        retrieval_result.get("source_chunks", []),
+                        operative_paragraphs,
+                        page_count,
+                    )
+                    rag_output["extraction_method"] = "final_pages_plus_retrieval"
+                else:
+                    extraction_context = _build_large_document_context(
+                        retrieved_context=retrieved_context,
+                        operative_paragraphs=operative_paragraphs,
+                        source_pages=source_pages,
+                        page_count=page_count,
+                    )
+                    print(
+                        "  [RAG] Extraction context prepared: "
+                        f"{len(extraction_context)} chars from {len(source_pages)} source pages"
+                    )
+
+                    rag_output = generator.generate(context=extraction_context, hard_facts={})
+                    rag_output["RAG_Source_Pages"] = _large_document_source_pages(
+                        source_pages,
+                        operative_paragraphs,
+                        page_count,
+                    )
+                    rag_output["RAG_Source_Chunks"] = _large_document_source_chunks(
+                        retrieval_result.get("source_chunks", []),
+                        operative_paragraphs,
+                        page_count,
+                    )
+                    rag_output["extraction_method"] = "rag_retrieval"
                 
-                # --- NEW HYBRID APPEAL LOGIC ---
+                # --- APPEAL LOGIC ---
                 if "Appeal_Risk_Signals" in rag_output:
                     print("  [RAG] Calculating deterministic appeal score...")
                     appeal_evaluation = AppealScorer.evaluate(rag_output["Appeal_Risk_Signals"])
                     
-                    # Ensure Action_Plan exists to avoid KeyError
                     if "Action_Plan" not in rag_output:
                         rag_output["Action_Plan"] = {}
                         
-                    # Inject the computed result directly into the Action Plan
                     rag_output["Action_Plan"]["Consideration_for_Appeal"] = appeal_evaluation["appeal_consideration"]
                     rag_output["Action_Plan"]["Appeal_Justification"] = appeal_evaluation["reasons"]
                     rag_output["Action_Plan"]["Appeal_Risk_Score"] = appeal_evaluation["score"]
                     rag_output["Action_Plan"]["LLM_Context"] = appeal_evaluation["llm_summary"]
                     
-                    # Clean up the raw signals so the frontend and database only see the processed result
                     del rag_output["Appeal_Risk_Signals"]
                 # --------------------------------
 

@@ -162,6 +162,7 @@ export default function ActionPlanPanel() {
   const [isContextOpen, setIsContextOpen] = useState(false);
 
   const departmentChips = actionPlan?.responsible_departments ?? [];
+  const complianceSection = actionPlan?.compliance_section ?? [];
 
   const totalActionItems = useMemo(() => {
     if (!actionPlan) {
@@ -315,6 +316,39 @@ export default function ActionPlanPanel() {
                 Required Actions
               </h3>
             </div>
+
+            {complianceSection.length > 0 ? (
+              <div className="mb-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+                <div className="mb-2 flex items-center gap-1.5">
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    className="text-emerald-600"
+                  >
+                    <path d="M9 11l3 3L22 4" />
+                    <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+                  </svg>
+                  <h3 className="text-sm font-semibold uppercase tracking-[0.16em] text-emerald-800">
+                    Compliance
+                  </h3>
+                </div>
+                <p className="text-xs text-emerald-700">
+                  LLM-derived compliance obligations from the most relevant judgment chunks.
+                </p>
+                <ul className="mt-3 space-y-2">
+                  {complianceSection.map((item, index) => (
+                    <li key={`${item}-${index}`} className="flex items-start gap-2 text-sm text-emerald-950">
+                      <span aria-hidden="true" className="mt-0.5 text-emerald-600">•</span>
+                      <span>{item}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
 
             {actionPlan.nature_of_action ? (
               <span className="mb-2 inline-block rounded-full bg-blue-100 px-2 py-0.5 text-xs text-blue-700">

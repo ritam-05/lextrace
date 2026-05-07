@@ -137,6 +137,7 @@ export interface AppealAnalysis {
 
 /** The complete structured action plan for one judgment */
 export interface ActionPlan {
+  compliance_section: string[];
   key_directions: KeyDirection[];
   compliance_steps: ComplianceStep[];
   /** Independent section - not attached to any directive */

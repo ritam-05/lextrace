@@ -118,6 +118,11 @@ export default function DashboardPage() {
     [trustedActionPlan],
   );
 
+  const trustedComplianceSection = useMemo(
+    () => trustedActionPlan?.compliance_section ?? [],
+    [trustedActionPlan],
+  );
+
   const trustedTimelines = useMemo(
     () => trustedActionPlan?.timelines ?? [],
     [trustedActionPlan],
@@ -302,6 +307,7 @@ export default function DashboardPage() {
           directives={trustedActionPlan?.key_directions ?? []}
         />
         <RequiredActionsSection
+          complianceSection={trustedComplianceSection}
           complianceSteps={trustedActionPlan?.compliance_steps ?? []}
           departments={trustedActionPlan?.responsible_departments ?? []}
         />

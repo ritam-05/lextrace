@@ -51,6 +51,7 @@ export function getTrustedActionPlan(actionPlan: ActionPlan | undefined): Action
 
   return {
     ...actionPlan,
+    compliance_section: actionPlan.compliance_section ?? [],
     key_directions: filterTrusted(actionPlan.key_directions),
     compliance_steps: filterTrusted(actionPlan.compliance_steps),
     timelines: filterTrusted(actionPlan.timelines),
@@ -148,6 +149,7 @@ export function finalizeFields(fields: ReviewField[]): ReviewField[] {
 export function finalizeActionPlan(actionPlan: ActionPlan): ActionPlan {
   return {
     ...actionPlan,
+    compliance_section: actionPlan.compliance_section ?? [],
     key_directions: filterTrusted(actionPlan.key_directions).map((item) => ({
       ...item,
       text: item.edited_text ?? item.text,

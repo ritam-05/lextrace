@@ -355,6 +355,7 @@ function normalizeActionPlan(payload: FastApiUploadPayload): ActionPlan {
       Key_Directions?: string[];
     };
     Action_Plan?: {
+      Compliance_Section?: string[];
       Compliance_Required?: string[];
       Key_Timelines?: string[];
       Responsible_Departments?: string[];
@@ -370,11 +371,14 @@ function normalizeActionPlan(payload: FastApiUploadPayload): ActionPlan {
 
   const ragExtraction = ragOutput?.Extraction ?? {};
   const ragPlan = ragOutput?.Action_Plan ?? {};
+  const complianceSection = ragPlan.Compliance_Section ?? [];
   const complianceSteps = ragPlan.Compliance_Required ?? [];
   const sourcePages = normalizeSourcePages(ragOutput?.RAG_Source_Pages);
   const sourceChunks = normalizeSourceChunks(ragOutput?.RAG_Source_Chunks);
 
   const action_plan: ActionPlan = {
+    compliance_section: complianceSection,
+
     key_directions: (ragExtraction.Key_Directions ?? [])
       .map((text: string, i: number) => ({
         id: `dir_${i}`,

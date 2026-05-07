@@ -4,11 +4,13 @@ import type { ComplianceStep } from "@/types";
 import { filterTrusted, getReviewedText, groupActionsByDepartment } from "@/lib/dashboard-utils";
 
 interface RequiredActionsSectionProps {
+  complianceSection: string[];
   complianceSteps: ComplianceStep[];
   departments: string[];
 }
 
 export default function RequiredActionsSection({
+  complianceSection,
   complianceSteps,
   departments,
 }: RequiredActionsSectionProps) {
@@ -25,6 +27,23 @@ export default function RequiredActionsSection({
           Verified operational checklist for implementation teams.
         </p>
       </div>
+
+      {complianceSection.length > 0 ? (
+        <div className="mb-5 rounded-lg border border-emerald-200 bg-emerald-50 p-4">
+          <h3 className="text-sm font-semibold text-emerald-900">Compliance</h3>
+          <p className="mt-1 text-sm text-emerald-800">
+            Extracted compliance obligations from the most relevant judgment chunks.
+          </p>
+          <ul className="mt-3 space-y-2">
+            {complianceSection.map((item, index) => (
+              <li key={`${item}-${index}`} className="flex items-start gap-2 text-sm text-emerald-900">
+                <span className="mt-0.5 text-emerald-600" aria-hidden="true">•</span>
+                <span>{item}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
 
       {groupedActions.length === 0 ? (
         <p className="text-sm text-slate-500">No verified compliance actions.</p>
