@@ -44,14 +44,19 @@ build/
 dist/
 *.egg-info/
 
+# Node dependency folders
 node_modules/
+frontend/node_modules/
 
 # Node modules
 node_modules/
 
-# Next.js build output
+# Next.js build output and caches
 .next/
+frontend/.next/
+frontend/.next/cache/
 out/
+frontend/out/
 
 # Production build
 build/
@@ -74,6 +79,7 @@ pnpm-debug.log*
 
 # TypeScript
 *.tsbuildinfo
+frontend/*.tsbuildinfo
 
 # OS files
 .DS_Store

@@ -345,6 +345,7 @@ function buildActionPlan(payload: VerificationPayload): ActionPlan {
       Key_Directions?: string[];
     };
     Action_Plan?: {
+      Compliance_Section?: string[];
       Compliance_Required?: string[];
       Key_Timelines?: string[];
       Responsible_Departments?: string[];
