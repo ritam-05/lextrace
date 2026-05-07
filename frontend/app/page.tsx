@@ -30,17 +30,17 @@ export default function HomePage() {
 
   return (
     <main className="min-h-screen flex flex-col bg-slate-50">
-      <section className="pt-16 pb-8 px-4">
-        <div className="mx-auto w-full max-w-4xl text-center">
-          <h1 className="text-3xl font-bold tracking-tight text-slate-900 font-[family-name:var(--font-geist-sans)]">
+      <section className="px-6 pb-10 pt-14">
+        <div className="mx-auto w-full max-w-6xl text-center">
+          <h1 className="text-5xl font-bold tracking-tight text-slate-900 font-[family-name:var(--font-geist-sans)]">
             LeXTrace
           </h1>
-          <div className="mt-6 border-t border-slate-200" />
+          <div className="mt-8 border-t border-slate-200" />
         </div>
       </section>
 
-      <section className="flex-1 flex items-start justify-center px-4 pt-8">
-        <div className="w-full max-w-xl">
+      <section className="flex flex-1 items-start justify-center px-6 pt-10">
+        <div className="w-full max-w-4xl">
           {uploadError ? (
             <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4 text-red-700 text-sm flex items-start justify-between gap-3">
               <span>{uploadError}</span>
@@ -55,7 +55,7 @@ export default function HomePage() {
             </div>
           ) : null}
 
-          <div className="w-full max-w-xl bg-white rounded-2xl shadow-sm border border-slate-200 p-8">
+          <div className="w-full rounded-2xl border border-slate-200 bg-white p-12 shadow-sm">
             <UploadCard
               onUploadSuccess={(docId) => {
                 router.push(`/review/${docId}`);

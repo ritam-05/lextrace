@@ -36,15 +36,15 @@ function WarningIcon() {
 function SuccessIcon() {
   return (
     <svg
-      width={24}
-      height={24}
+      width={36}
+      height={36}
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
       strokeWidth={2}
       strokeLinecap="round"
       strokeLinejoin="round"
-      className="text-green-500 mb-2"
+      className="mb-4 text-green-500"
       aria-hidden="true"
     >
       <path d="m5 12 5 5L20 7" />
@@ -114,7 +114,7 @@ export default function DropZone({
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
         className={[
-          "relative flex flex-col items-center justify-center w-full rounded-xl border-2 border-dashed cursor-pointer transition-all duration-200 min-h-[200px] p-8 text-center",
+          "relative flex min-h-[320px] w-full cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed p-12 text-center transition-all duration-200",
           zoneClasses,
           isDisabled ? "pointer-events-none opacity-50" : "",
         ].join(" ")}
@@ -130,15 +130,15 @@ export default function DropZone({
         {!selectedFile ? (
           <>
             <svg
-              width={48}
-              height={48}
+              width={72}
+              height={72}
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
               strokeWidth={1.5}
               strokeLinecap="round"
               strokeLinejoin="round"
-              className="text-slate-400 mb-3"
+              className="mb-5 text-slate-400"
               aria-hidden="true"
             >
               <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
@@ -148,21 +148,21 @@ export default function DropZone({
               <polyline points="10 9 9 9 8 9" />
             </svg>
 
-            <p className="text-sm font-medium text-slate-700 mb-1">
+            <p className="mb-2 text-lg font-semibold text-slate-700">
               Upload the judgment order for official review
             </p>
-            <p className="text-xs text-slate-400">PDF only, up to 50MB.</p>
+            <p className="text-base text-slate-400">PDF only, up to 50MB.</p>
           </>
         ) : (
           <>
             <SuccessIcon />
-            <p className="text-sm font-medium text-slate-800">
+            <p className="max-w-full truncate text-lg font-semibold text-slate-800">
               {selectedFile.name}
             </p>
-            <p className="text-xs text-slate-400 mt-0.5">
+            <p className="mt-1 text-sm text-slate-400">
               {formatFileSize(selectedFile.size)}
             </p>
-            <p className="text-xs text-slate-400 mt-2">
+            <p className="mt-3 text-sm text-slate-400">
               Click to choose a different file
             </p>
           </>
@@ -170,7 +170,7 @@ export default function DropZone({
       </div>
 
       {validationError ? (
-        <p className="mt-2 text-xs text-red-600 flex items-center gap-1">
+        <p className="mt-3 flex items-center gap-1.5 text-sm text-red-600">
           <WarningIcon />
           {validationError}
         </p>

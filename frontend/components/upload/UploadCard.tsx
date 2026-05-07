@@ -208,7 +208,7 @@ export default function UploadCard({
         type="button"
         onClick={handleUpload}
         disabled={!selectedFile || isProcessing}
-        className="w-full mt-4 py-3 px-4 bg-slate-900 hover:bg-slate-700 text-white text-sm font-medium rounded-xl transition-colors duration-200 disabled:opacity-40 disabled:cursor-not-allowed"
+        className="mt-6 w-full rounded-xl bg-slate-900 px-6 py-5 text-base font-semibold text-white transition-colors duration-200 hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
       >
         Upload
       </button>
