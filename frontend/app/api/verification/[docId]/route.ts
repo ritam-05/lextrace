@@ -365,6 +365,7 @@ function buildActionPlan(payload: VerificationPayload): ActionPlan {
   const sourceChunks = normalizeSourceChunks(ragOutput?.RAG_Source_Chunks);
 
   return {
+    compliance_section: ragPlan?.Compliance_Section ?? [],
     key_directions: (ragExtraction.Key_Directions ?? []).map((text, index) => ({
       id: `dir_${index}`,
       text,
