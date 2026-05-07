@@ -25,6 +25,161 @@ generator = ActionPlanGenerator()
 arbitrator = Arbitrator()
 
 
+def _retrieval_depth(page_count: int) -> int:
+    """Use wider retrieval for long judgments where orders may span many pages."""
+    if page_count >= 100:
+        return 14
+    if page_count >= 70:
+        return 12
+    if page_count >= 30:
+        return 9
+    return 5
+
+
+def _tail_page_limit(page_count: int) -> int:
+    """Include more final pages for long judgments without flooding the LLM."""
+    if page_count >= 100:
+        return 12
+    if page_count >= 70:
+        return 10
+    if page_count >= 30:
+        return 8
+    return 4
+
+
+def _format_paragraph_context(paragraphs: list, max_chars: int) -> str:
+    parts = []
+    current_page = None
+    total_chars = 0
+
+    for paragraph in paragraphs:
+        text = getattr(paragraph, "text", "").strip()
+        page = getattr(paragraph, "page", None)
+        if not text:
+            continue
+
+        prefix = f"\n\n[Page {page}]\n" if page != current_page else "\n\n"
+        entry = f"{prefix}{text}"
+        if total_chars + len(entry) > max_chars:
+            remaining = max_chars - total_chars
+            if remaining > 500:
+                parts.append(entry[:remaining])
+            break
+
+        parts.append(entry)
+        total_chars += len(entry)
+        current_page = page
+
+    return "".join(parts).strip()
+
+
+def _final_pages_context(paragraphs: list, page_count: int) -> str:
+    selected_pages = set(_final_page_numbers(paragraphs, page_count))
+    selected_paragraphs = [
+        paragraph
+        for paragraph in paragraphs
+        if getattr(paragraph, "page", None) in selected_pages
+    ]
+    return _format_paragraph_context(selected_paragraphs, max_chars=14000)
+
+
+def _final_page_numbers(paragraphs: list, page_count: int) -> list[int]:
+    pages = sorted({getattr(paragraph, "page", None) for paragraph in paragraphs})
+    pages = [page for page in pages if isinstance(page, int)]
+    if not pages:
+        return []
+
+    return pages[-_tail_page_limit(page_count):]
+
+
+def _source_page_window_context(paragraphs: list, source_pages: list[int]) -> str:
+    if not source_pages:
+        return ""
+
+    selected_pages = {
+        page + offset
+        for page in source_pages
+        if isinstance(page, int)
+        for offset in (-1, 0, 1)
+    }
+    selected_paragraphs = [
+        paragraph
+        for paragraph in paragraphs
+        if getattr(paragraph, "page", None) in selected_pages
+    ]
+    return _format_paragraph_context(selected_paragraphs, max_chars=10000)
+
+
+def _build_large_document_context(
+    retrieved_context: str,
+    operative_paragraphs: list,
+    source_pages: list[int],
+    page_count: int,
+) -> str:
+    """
+    Large judgments need both semantic hits and the actual closing order pages.
+    Retrieval alone can miss later directions when the operative portion spans
+    multiple pages, while tail pages alone can miss departments named nearby.
+    """
+    if page_count < 30:
+        return retrieved_context
+
+    sections = [f"[Retrieved directive/deadline passages]\n{retrieved_context.strip()}"]
+
+    source_window = _source_page_window_context(operative_paragraphs, source_pages)
+    if source_window:
+        sections.append(f"[Pages around retrieved evidence]\n{source_window}")
+
+    final_pages = _final_pages_context(operative_paragraphs, page_count)
+    if final_pages:
+        sections.append(f"[Final operative pages]\n{final_pages}")
+
+    combined = "\n\n---\n\n".join(section for section in sections if section.strip())
+    return combined[:28000]
+
+
+def _large_document_source_pages(
+    source_pages: list[int],
+    operative_paragraphs: list,
+    page_count: int,
+) -> list[int]:
+    pages = []
+    for page in [*source_pages, *_final_page_numbers(operative_paragraphs, page_count)]:
+        if isinstance(page, int) and page not in pages:
+            pages.append(page)
+    return pages
+
+
+def _large_document_source_chunks(
+    existing_chunks: list[dict],
+    operative_paragraphs: list,
+    page_count: int,
+) -> list[dict]:
+    if page_count < 30:
+        return existing_chunks
+
+    selected_pages = set(_final_page_numbers(operative_paragraphs, page_count))
+    synthetic_chunks = []
+    for index, paragraph in enumerate(operative_paragraphs):
+        page = getattr(paragraph, "page", None)
+        text = getattr(paragraph, "text", "").strip()
+        if page not in selected_pages or not text:
+            continue
+        synthetic_chunks.append(
+            {
+                "child_id": f"operative_context_{index}",
+                "parent_id": "large_document_context",
+                "page": page,
+                "score": None,
+                "text": text[:1000],
+            }
+        )
+        if len(synthetic_chunks) >= 80:
+            break
+
+    return [*existing_chunks, *synthetic_chunks]
+
+
 def _is_missing_judge_name(value: object) -> bool:
     if not isinstance(value, str):
         return True
@@ -155,20 +310,43 @@ async def process_judgment(file: UploadFile = File(...)):
                     "compliance strict affidavit report execution disposed decree"
                 )
 
+                retrieval_top_k = _retrieval_depth(page_count)
+                print(f"  [RAG] Retrieval depth selected for {page_count} pages: top_k={retrieval_top_k}")
+
                 retrieval_result = rag_service.retrieve_context(
                     semantic_query=semantic_query,
                     keyword_query=keyword_query,
-                    top_k=5,
+                    top_k=retrieval_top_k,
                     include_sources=True,
                 )
                 retrieved_context = retrieval_result.get("context", "")
+                source_pages = retrieval_result.get("source_pages", [])
 
                 if not retrieved_context:
                     raise Exception("Failed to retrieve context")
 
-                rag_output = generator.generate(context=retrieved_context, hard_facts={})
-                rag_output["RAG_Source_Pages"] = retrieval_result.get("source_pages", [])
-                rag_output["RAG_Source_Chunks"] = retrieval_result.get("source_chunks", [])
+                extraction_context = _build_large_document_context(
+                    retrieved_context=retrieved_context,
+                    operative_paragraphs=operative_paragraphs,
+                    source_pages=source_pages,
+                    page_count=page_count,
+                )
+                print(
+                    "  [RAG] Extraction context prepared: "
+                    f"{len(extraction_context)} chars from {len(source_pages)} source pages"
+                )
+
+                rag_output = generator.generate(context=extraction_context, hard_facts={})
+                rag_output["RAG_Source_Pages"] = _large_document_source_pages(
+                    source_pages,
+                    operative_paragraphs,
+                    page_count,
+                )
+                rag_output["RAG_Source_Chunks"] = _large_document_source_chunks(
+                    retrieval_result.get("source_chunks", []),
+                    operative_paragraphs,
+                    page_count,
+                )
                 
                 # --- NEW HYBRID APPEAL LOGIC ---
                 if "Appeal_Risk_Signals" in rag_output:
