@@ -51,14 +51,51 @@ def _retrieval_depth(page_count: int) -> int:
 
 
 def _tail_page_limit(page_count: int) -> int:
-    """Include more final pages for long judgments without flooding the LLM."""
-    if page_count >= 100:
-        return 12
-    if page_count >= 70:
-        return 10
-    if page_count >= 30:
-        return 8
-    return 4
+    """Prioritize final pages for directive extraction, capped at 6 pages."""
+    # Always focus on final 5-6 pages for court directives
+    return 6
+
+
+def _extract_final_pages_context_only(paragraphs: list, page_count: int) -> str:
+    """
+    For large documents, extract ONLY the final 6 pages as primary context for directive extraction.
+    This bypasses RAG retrieval and focuses the LLM on where court orders actually appear.
+    """
+    if page_count < 30:
+        return ""
+    
+    pages = sorted({getattr(paragraph, "page", None) for paragraph in paragraphs})
+    pages = [page for page in pages if isinstance(page, int)]
+    if not pages:
+        return ""
+    
+    final_page_numbers = set(pages[-6:])  # Last 6 pages
+    final_pages_paragraphs = [
+        paragraph for paragraph in paragraphs
+        if getattr(paragraph, "page", None) in final_page_numbers
+    ]
+    
+    if not final_pages_paragraphs:
+        return ""
+    
+    # Format final pages with clear page markers
+    parts = []
+    current_page = None
+    for paragraph in final_pages_paragraphs:
+        text = getattr(paragraph, "text", "").strip()
+        page = getattr(paragraph, "page", None)
+        
+        if not text:
+            continue
+        
+        if page != current_page:
+            parts.append(f"\n[PAGE {page}]\n")
+            current_page = page
+        
+        parts.append(text)
+        parts.append("\n")
+    
+    return "".join(parts).strip()
 
 
 def _format_paragraph_context(paragraphs: list, max_chars: int) -> str:
@@ -163,11 +200,19 @@ def _build_large_document_context(
     Retrieval alone can miss later directions when the operative portion spans
     multiple pages, while tail pages alone can miss departments named nearby.
     """
+    sections = []
+
+    final_pages = _final_pages_context(operative_paragraphs, page_count)
+    if final_pages:
+        sections.append(f"[Final order pages - primary source for court directives]\n{final_pages}")
+
     if page_count < 30:
-        return retrieved_context
+        if retrieved_context.strip():
+            sections.append(f"[Earlier retrieved context - use only for resolving names/details]\n{retrieved_context.strip()}")
+        combined = "\n\n---\n\n".join(section for section in sections if section.strip())
+        return combined[:28000]
 
     directive_focus = _directive_focus_context(operative_paragraphs, page_count)
-    sections = []
     if directive_focus:
         sections.append(f"[Directive-focused operative paragraphs]\n{directive_focus}")
 
@@ -177,10 +222,6 @@ def _build_large_document_context(
     source_window = _source_page_window_context(operative_paragraphs, source_pages)
     if source_window:
         sections.append(f"[Pages around retrieved evidence]\n{source_window}")
-
-    final_pages = _final_pages_context(operative_paragraphs, page_count)
-    if final_pages:
-        sections.append(f"[Final operative pages]\n{final_pages}")
 
     combined = "\n\n---\n\n".join(section for section in sections if section.strip())
     return combined[:28000]
@@ -372,6 +413,47 @@ async def process_judgment(file: UploadFile = File(...)):
                 )
                 rag_service.ingest_document(parent_documents, child_chunks)
 
+                # For large documents, extract directives ONLY from final pages
+                if page_count >= 30:
+                    print(f"  [RAG] Large document detected ({page_count} pages): Extracting directives from final 6 pages ONLY")
+                    final_pages_context = _extract_final_pages_context_only(
+                        operative_paragraphs, 
+                        page_count
+                    )
+                    
+                    if final_pages_context:
+                        print(f"  [RAG] Final pages context: {len(final_pages_context)} chars")
+                        rag_output = generator.generate(context=final_pages_context, hard_facts={})
+                        
+                        # Add source page tracking for final pages extraction
+                        final_page_numbers = sorted({getattr(p, "page", None) for p in operative_paragraphs})
+                        final_page_numbers = [p for p in final_page_numbers if isinstance(p, int)]
+                        rag_output["RAG_Source_Pages"] = final_page_numbers[-6:] if len(final_page_numbers) >= 6 else final_page_numbers
+                        rag_output["RAG_Source_Chunks"] = []
+                        rag_output["extraction_method"] = "final_pages_primary"
+                        
+                        # --- APPEAL LOGIC ---
+                        if "Appeal_Risk_Signals" in rag_output:
+                            print("  [RAG] Calculating deterministic appeal score...")
+                            appeal_evaluation = AppealScorer.evaluate(rag_output["Appeal_Risk_Signals"])
+                            
+                            if "Action_Plan" not in rag_output:
+                                rag_output["Action_Plan"] = {}
+                                
+                            rag_output["Action_Plan"]["Consideration_for_Appeal"] = appeal_evaluation["appeal_consideration"]
+                            rag_output["Action_Plan"]["Appeal_Justification"] = appeal_evaluation["reasons"]
+                            rag_output["Action_Plan"]["Appeal_Risk_Score"] = appeal_evaluation["score"]
+                            rag_output["Action_Plan"]["LLM_Context"] = appeal_evaluation["llm_summary"]
+                            
+                            del rag_output["Appeal_Risk_Signals"]
+                        # --------------------------------
+                        
+                        print("  [RAG] Completed directive extraction from final pages")
+                        return rag_output
+                    else:
+                        print("  [RAG] No final pages content extracted, falling back to standard RAG")
+
+                # For smaller documents, use traditional RAG retrieval
                 semantic_query = (
                     "What are the final operational directives, orders, deadlines issued by the court, "
                     "and which specific departments are instructed to take action?"
@@ -420,23 +502,21 @@ async def process_judgment(file: UploadFile = File(...)):
                     operative_paragraphs,
                     page_count,
                 )
+                rag_output["extraction_method"] = "rag_retrieval"
                 
-                # --- NEW HYBRID APPEAL LOGIC ---
+                # --- APPEAL LOGIC ---
                 if "Appeal_Risk_Signals" in rag_output:
                     print("  [RAG] Calculating deterministic appeal score...")
                     appeal_evaluation = AppealScorer.evaluate(rag_output["Appeal_Risk_Signals"])
                     
-                    # Ensure Action_Plan exists to avoid KeyError
                     if "Action_Plan" not in rag_output:
                         rag_output["Action_Plan"] = {}
                         
-                    # Inject the computed result directly into the Action Plan
                     rag_output["Action_Plan"]["Consideration_for_Appeal"] = appeal_evaluation["appeal_consideration"]
                     rag_output["Action_Plan"]["Appeal_Justification"] = appeal_evaluation["reasons"]
                     rag_output["Action_Plan"]["Appeal_Risk_Score"] = appeal_evaluation["score"]
                     rag_output["Action_Plan"]["LLM_Context"] = appeal_evaluation["llm_summary"]
                     
-                    # Clean up the raw signals so the frontend and database only see the processed result
                     del rag_output["Appeal_Risk_Signals"]
                 # --------------------------------
 

@@ -295,9 +295,20 @@ class ActionPlanGenerator:
     def _extract_facts(self, context: str, hard_facts: dict = None, retry: bool = True) -> dict:
         """
         Takes the retrieved context and forces the LLM to output a structured JSON Action Plan.
+        For final-pages-only context, prioritizes directive extraction from those pages.
         """
         hard_facts = hard_facts or {}
         context = self._trim_context(context)
+        
+        # Detect if this is final pages context (contains [PAGE n] markers)
+        is_final_pages_context = "[PAGE" in context
+        final_pages_instruction = ""
+        if is_final_pages_context:
+            final_pages_instruction = """
+        SPECIAL INSTRUCTION FOR FINAL PAGES EXTRACTION:
+        The context below contains ONLY the final 5-6 pages of the judgment where court orders typically appear.
+        Extract ALL actionable directives, deadlines, and department responsibilities from these final pages.
+        Every Key_Direction and Compliance_Required item MUST come from this final pages content."""
 
         prompt = f"""
         You are a highly precise Legal Data Extraction Engine powering an e-Governance compliance platform.
@@ -307,12 +318,18 @@ class ActionPlanGenerator:
         1. NO HALLUCINATION: If a specific piece of information (like a deadline or department) is not explicitly stated or clearly inferable from the text, you MUST output "Not Specified" or an empty array [].
         2. ENTITY RESOLUTION: If the text refers to "the respondent" or "the state," attempt to extract the specific department name if it was mentioned earlier in the provided context.
         3. SEPARATION OF CONCERNS: 
-           - 'Key_Directions' should be faithful summaries of the judge's actual orders.
+           - 'Key_Directions' must be faithful summaries of the judge's actual final orders from the final/order pages. Use earlier retrieved context only to resolve names, departments, case numbers, and other details referenced by those final orders.
            - 'Compliance_Required' must translate those orders into concrete, plain-English steps for a bureaucrat to execute.
                   - 'Key_Timelines' must contain the time-based instruction for those steps and, where available, the completion window or deadline (for example: "Within 2 weeks", "By 25.04.2026", or "Immediately"). Start each timeline with a capital letter and write it as a normal sentence.
                   - If the judgment does not explicitly state a timeline, return an empty array [] for 'Key_Timelines'. Do not restate the action plan there.
         4. STRICT ENUMS: For 'Nature_of_Action', you are strictly limited to the provided list. Do not invent new categories.
         5. DO NOT COPY THE SCHEMA OR THESE INSTRUCTIONS AS OUTPUT VALUES. Every string must be extracted from or directly based on the judgment context.
+        {final_pages_instruction}
+
+        DIRECTIVE SIGNALS:
+        Treat final-order language as actionable when it disposes of proceedings, quashes/sets aside an FIR, charge sheet, order, notice, policy, award, conviction, sentence, eviction, attachment, or other proceeding; directs a respondent/state/authority/court/registry to consider, decide, pass fresh orders, pay, refund, release, reinstate, appoint, regularize, issue a certificate/license/NOC, investigate, inquire, file a report/affidavit, produce records, provide amenities, remove encroachments, list/register a case, or send records; restrains coercive action, demolition, dispossession, recovery, enforcement, cancellation, transfer, tender steps, or status changes; continues/vacates/modifies interim relief; stays trial, execution, recovery, arrest, demolition, dispossession, or implementation; remands a matter; requires parties/accused/complainant to appear; imposes costs/compensation/interest; grants/rejects/modifies bail; or records settlement/withdrawal/compromise.
+        Directive wording often includes "is allowed", "is dismissed", "stands disposed of", "is quashed", "is set aside", "is directed", "shall", "is restrained", "is stayed", "is remanded", "shall appear", "forthwith", "immediately", "expeditiously", or "within [time]".
+        Do not treat prayers, facts, allegations, submissions, issues, observations, hopes, or suggestions as directives unless the court finally orders them in the final/order portion. Extract each distinct operative direction separately, including time limits, amounts, conditions, and the directed party where stated.
         
         Case Facts: {json.dumps(hard_facts)}
         Context:

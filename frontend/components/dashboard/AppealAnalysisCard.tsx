@@ -57,7 +57,7 @@ export default function AppealAnalysisCard({
                 tone.badge,
               ].join(" ")}
             >
-              {appealAnalysis.consideration} · Risk {appealAnalysis.risk_score}
+              {appealAnalysis.consideration}
             </span>
             <span className="sr-only">
               Hover over the appeal score to view the appeal consideration legend
