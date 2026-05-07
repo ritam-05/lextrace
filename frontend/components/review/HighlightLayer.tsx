@@ -3,6 +3,10 @@
 import { clampToPage, scaleBbox } from "@/lib/pdfCoords";
 import type { BBox } from "@/types";
 
+const UNDERLINE_VERTICAL_CORRECTION_PX = -42;
+const ACTIVE_UNDERLINE_THICKNESS_PX = 4;
+const STANDARD_UNDERLINE_THICKNESS_PX = 1;
+
 interface RectHighlight {
   kind: "rect";
   rect: {
@@ -59,7 +63,6 @@ export default function HighlightLayer({
                 renderHeight,
               )
             : clampToPage(highlight.rect, renderWidth, renderHeight);
-
         return (
           <button
             key={`${highlight.fieldId}-${scaledRect.left}-${scaledRect.top}`}
@@ -73,12 +76,16 @@ export default function HighlightLayer({
             ].join(" ")}
             style={{
               left: scaledRect.left,
-              top: scaledRect.top,
+              top: scaledRect.top + UNDERLINE_VERTICAL_CORRECTION_PX,
               width: scaledRect.width,
               height: scaledRect.height,
               color: highlight.color,
               background: "transparent",
-              borderBottom: `${highlight.isActive ? 20 : 2}px solid ${highlight.color}`,
+              borderBottom: `${
+                highlight.isActive
+                  ? ACTIVE_UNDERLINE_THICKNESS_PX
+                  : STANDARD_UNDERLINE_THICKNESS_PX
+              }px solid ${highlight.color}`,
               opacity: highlight.isActive ? 1 : 0.82,
               boxShadow: "none",
             }}
