@@ -19,7 +19,7 @@ pdfjs.GlobalWorkerOptions.workerSrc = new URL(
 const PAGE_GAP_PX = 24;
 const FLASH_DURATION_MS = 1_400;
 const LINE_GROUP_THRESHOLD_PX = 6;
-const ACTIVE_UNDERLINE_COLOR = "#166534";
+const ACTIVE_UNDERLINE_COLOR = "#dc2626";
 
 interface PdfViewerProps {
   fileDataUrl: string | null;
