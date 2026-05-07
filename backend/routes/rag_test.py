@@ -1,4 +1,5 @@
 import asyncio
+import re
 import uuid
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
@@ -25,14 +26,27 @@ generator = ActionPlanGenerator()
 arbitrator = Arbitrator()
 
 
+DIRECTIVE_KEYWORD_RE = re.compile(
+    r"\b(" 
+    r"direct(?:ed|s|ive|ives|ion|ions)?|"
+    r"order(?:ed|s|ing)?|"
+    r"shall|must|required|ensure|comply|compliance|"
+    r"within|forthwith|immediately|"
+    r"days?|weeks?|months?|deadline|time\s+limit|"
+    r"affidavit|report|submit|file|produce|deposit|pay|release|implement|appoint|constitute"
+    r")\b",
+    re.IGNORECASE,
+)
+
+
 def _retrieval_depth(page_count: int) -> int:
     """Use wider retrieval for long judgments where orders may span many pages."""
     if page_count >= 100:
-        return 14
+        return 18
     if page_count >= 70:
-        return 12
+        return 15
     if page_count >= 30:
-        return 9
+        return 12
     return 5
 
 
@@ -110,6 +124,34 @@ def _source_page_window_context(paragraphs: list, source_pages: list[int]) -> st
     return _format_paragraph_context(selected_paragraphs, max_chars=10000)
 
 
+def _directive_focus_context(paragraphs: list, page_count: int) -> str:
+    """Pull paragraphs that contain order language, plus close neighbors."""
+    if page_count < 30 or not paragraphs:
+        return ""
+
+    selected_keys: set[tuple[int | None, int | None]] = set()
+    selected_paragraphs = []
+
+    for index, paragraph in enumerate(paragraphs):
+        text = getattr(paragraph, "text", "").strip()
+        if not text or not DIRECTIVE_KEYWORD_RE.search(text):
+            continue
+
+        start = max(0, index - 1)
+        end = min(len(paragraphs), index + 2)
+        for candidate in paragraphs[start:end]:
+            candidate_key = (
+                getattr(candidate, "page", None),
+                getattr(candidate, "para_index", None),
+            )
+            if candidate_key in selected_keys:
+                continue
+            selected_keys.add(candidate_key)
+            selected_paragraphs.append(candidate)
+
+    return _format_paragraph_context(selected_paragraphs, max_chars=12000)
+
+
 def _build_large_document_context(
     retrieved_context: str,
     operative_paragraphs: list,
@@ -124,7 +166,13 @@ def _build_large_document_context(
     if page_count < 30:
         return retrieved_context
 
-    sections = [f"[Retrieved directive/deadline passages]\n{retrieved_context.strip()}"]
+    directive_focus = _directive_focus_context(operative_paragraphs, page_count)
+    sections = []
+    if directive_focus:
+        sections.append(f"[Directive-focused operative paragraphs]\n{directive_focus}")
+
+    if retrieved_context.strip():
+        sections.append(f"[Retrieved directive/deadline passages]\n{retrieved_context.strip()}")
 
     source_window = _source_page_window_context(operative_paragraphs, source_pages)
     if source_window:
@@ -144,8 +192,17 @@ def _large_document_source_pages(
     page_count: int,
 ) -> list[int]:
     pages = []
+    directive_pages = {
+        getattr(paragraph, "page", None)
+        for paragraph in operative_paragraphs
+        if getattr(paragraph, "text", "").strip()
+        and DIRECTIVE_KEYWORD_RE.search(getattr(paragraph, "text", ""))
+    }
     for page in [*source_pages, *_final_page_numbers(operative_paragraphs, page_count)]:
         if isinstance(page, int) and page not in pages:
+            pages.append(page)
+    for page in sorted(page for page in directive_pages if isinstance(page, int)):
+        if page not in pages:
             pages.append(page)
     return pages
 
@@ -175,6 +232,23 @@ def _large_document_source_chunks(
             }
         )
         if len(synthetic_chunks) >= 80:
+            break
+
+    for index, paragraph in enumerate(operative_paragraphs):
+        page = getattr(paragraph, "page", None)
+        text = getattr(paragraph, "text", "").strip()
+        if page in selected_pages or not text or not DIRECTIVE_KEYWORD_RE.search(text):
+            continue
+        synthetic_chunks.append(
+            {
+                "child_id": f"directive_context_{index}",
+                "parent_id": "large_document_context",
+                "page": page,
+                "score": None,
+                "text": text[:1000],
+            }
+        )
+        if len(synthetic_chunks) >= 120:
             break
 
     return [*existing_chunks, *synthetic_chunks]

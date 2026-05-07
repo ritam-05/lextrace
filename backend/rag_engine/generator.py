@@ -28,6 +28,26 @@ PROMPT_ECHO_MARKERS = {
     "strictly choose one",
 }
 
+DATE_ONLY_RE = __import__("re").compile(
+    r"^(?:\d{1,2}[./-]\d{1,2}[./-]\d{2,4}|\d{1,2}(?:ST|ND|RD|TH)?\s+(?:DAY\s+OF\s+)?"
+    r"(?:JAN(?:UARY)?|FEB(?:RUARY)?|MAR(?:CH)?|APR(?:IL)?|MAY|JUN(?:E)?|"
+    r"JUL(?:Y)?|AUG(?:UST)?|SEP(?:TEMBER)?|SEPT|OCT(?:OBER)?|NOV(?:EMBER)?|DEC(?:EMBER)?)"
+    r",?\s+\d{2,4}|"
+    r"(?:JAN(?:UARY)?|FEB(?:RUARY)?|MAR(?:CH)?|APR(?:IL)?|MAY|JUN(?:E)?|"
+    r"JUL(?:Y)?|AUG(?:UST)?|SEP(?:TEMBER)?|SEPT|OCT(?:OBER)?|NOV(?:EMBER)?|DEC(?:EMBER)?)"
+    r"\s+\d{1,2}(?:ST|ND|RD|TH)?,?\s+\d{2,4})$",
+    __import__("re").IGNORECASE,
+)
+
+TIMELINE_SIGNAL_RE = __import__("re").compile(
+    r"\b(" 
+    r"within|by|before|after|immediately|forthwith|urgent|urgently|"
+    r"days?|weeks?|months?|hours?|deadline|due|time\s+limit|"
+    r"submit|file|produce|deposit|pay|comply|compliance|report|affidavit|implement|take\s+action"
+    r")\b",
+    __import__("re").IGNORECASE,
+)
+
 
 class ActionPlanGenerator:
     def __init__(self):
@@ -39,12 +59,35 @@ class ActionPlanGenerator:
         self.model = "llama-3.1-8b-instant"
 
     @staticmethod
-    def _trim_context(context: str, max_chars: int = 24000) -> str:
+    def _trim_context(context: str, max_chars: int = 5000) -> str:
         """
-        Keep the prompt comfortably bounded. RAG context is already ranked, so
-        preserving the beginning and end is enough for operative paragraphs that
-        spill over adjacent chunks.
+        Keep the prompt tightly bounded so Groq stays within TPM limits.
+        When the route provides sectioned context, keep only the most relevant
+        sections and compress each one before falling back to head/tail trimming.
         """
+        if not context:
+            return context
+
+        section_markers = (
+            "[Directive-focused operative paragraphs]",
+            "[Retrieved directive/deadline passages]",
+            "[Pages around retrieved evidence]",
+            "[Final operative pages]",
+        )
+        if any(marker in context for marker in section_markers):
+            sections = []
+            for section in context.split("\n\n---\n\n"):
+                section = section.strip()
+                if not section:
+                    continue
+                if not any(marker in section for marker in section_markers):
+                    continue
+                sections.append(section[:1800])
+                if len(sections) == 2:
+                    break
+            if sections:
+                return "\n\n---\n\n".join(sections)
+
         if len(context) <= max_chars:
             return context
 
@@ -78,13 +121,68 @@ class ActionPlanGenerator:
 
         cleaned = []
         for item in value:
-            if isinstance(item, str):
-                text = item.strip()
-            else:
-                text = str(item).strip() if item is not None else ""
+            text = ActionPlanGenerator._plain_text_value(item)
             if text:
                 cleaned.append(text)
         return cleaned
+
+    @staticmethod
+    def _plain_text_value(value: Any) -> str:
+        if isinstance(value, str):
+            return value.strip()
+
+        if isinstance(value, list):
+            parts = [ActionPlanGenerator._plain_text_value(item) for item in value]
+            return " ".join(part for part in parts if part).strip()
+
+        if isinstance(value, dict):
+            preferred_keys = (
+                "Direction",
+                "direction",
+                "text",
+                "Text",
+                "value",
+                "Value",
+                "summary",
+                "Summary",
+                "content",
+                "Content",
+                "Action",
+                "action",
+                "Deadline",
+                "deadline",
+            )
+            for key in preferred_keys:
+                candidate = value.get(key)
+                if isinstance(candidate, str) and candidate.strip():
+                    return candidate.strip()
+
+            flattened = []
+            for key, candidate in value.items():
+                candidate_text = ActionPlanGenerator._plain_text_value(candidate)
+                if candidate_text:
+                    flattened.append(f"{key}: {candidate_text}")
+            return "; ".join(flattened).strip()
+
+        if value is None:
+            return ""
+
+        return str(value).strip()
+
+    @staticmethod
+    def _is_valid_timeline_item(value: Any) -> bool:
+        text = ActionPlanGenerator._plain_text_value(value)
+        if not text:
+            return False
+
+        normalized = " ".join(text.lower().split())
+        if any(marker in normalized for marker in ("reserved on", "pronounced on", "date of order")):
+            return False
+
+        if DATE_ONLY_RE.match(text.strip()):
+            return False
+
+        return True
 
     @staticmethod
     def _contains_prompt_echo(value: Any) -> bool:
@@ -116,11 +214,17 @@ class ActionPlanGenerator:
             },
             "Action_Plan": {
                 "Compliance_Required": self._list_of_strings(action_plan.get("Compliance_Required")),
-                "Key_Timelines": self._list_of_strings(action_plan.get("Key_Timelines")),
                 "Responsible_Departments": self._list_of_strings(action_plan.get("Responsible_Departments")),
                 "Nature_of_Action": nature,
             },
         }
+
+        raw_timelines = self._list_of_strings(action_plan.get("Key_Timelines"))
+        filtered_timelines = [item for item in raw_timelines if self._is_valid_timeline_item(item)]
+        if raw_timelines:
+            normalized["Action_Plan"]["Key_Timelines"] = filtered_timelines
+        else:
+            normalized["Action_Plan"]["Key_Timelines"] = ["Forthwith/Immediate action is required"]
 
         if self._contains_prompt_echo(normalized):
             raise ValueError("LLM copied extraction instructions into the action plan.")
@@ -205,6 +309,8 @@ class ActionPlanGenerator:
         3. SEPARATION OF CONCERNS: 
            - 'Key_Directions' should be faithful summaries of the judge's actual orders.
            - 'Compliance_Required' must translate those orders into concrete, plain-English steps for a bureaucrat to execute.
+                  - 'Key_Timelines' must contain the time-based instruction for those steps and, where available, the completion window or deadline (for example: "Within 2 weeks", "By 25.04.2026", or "Immediately"). Start each timeline with a capital letter and write it as a normal sentence.
+                  - If the judgment does not explicitly state a timeline, return an empty array [] for 'Key_Timelines'. Do not restate the action plan there.
         4. STRICT ENUMS: For 'Nature_of_Action', you are strictly limited to the provided list. Do not invent new categories.
         5. DO NOT COPY THE SCHEMA OR THESE INSTRUCTIONS AS OUTPUT VALUES. Every string must be extracted from or directly based on the judgment context.
         
@@ -234,13 +340,13 @@ class ActionPlanGenerator:
         try:
             response = self.client.chat.completions.create(
                 messages=[
-                    {
-                        "role": "system",
-                        "content": (
-                            "You extract court compliance data. Return only valid JSON. "
-                            "Never echo placeholders, schemas, or instructions."
-                        ),
-                    },
+                        {
+                            "role": "system",
+                            "content": (
+                                "You extract court compliance data. Return only valid JSON. "
+                                "Never echo placeholders, schemas, or instructions."
+                            ),
+                        },
                     {"role": "user", "content": prompt},
                 ],
                 model=self.model,
@@ -269,6 +375,7 @@ class ActionPlanGenerator:
         
     def _analyze_appeal_risk(self, context: str, extracted_directions: list) -> dict:
         """STAGE 2: Subjective legal analysis based on context and extracted facts."""
+        context = self._trim_context(context, max_chars=2500)
         prompt = f"""
         You are an expert Legal Analyst evaluating a judgment for appeal risks.
         Review the context and the specific directions issued by the court.
