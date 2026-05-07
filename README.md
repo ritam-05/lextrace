@@ -36,12 +36,24 @@ The app is split into three deployed parts:
 3. The Next.js route forwards the file to the FastAPI backend.
 4. The backend extracts text from the PDF, using OCR fallback when needed.
 5. Regex extraction identifies structured metadata such as case number, court, judge, parties, and order date.
-6. RAG extraction analyzes the judgment text for key directions, compliance requirements, timelines, departments, and appeal risk.
-7. The arbitration layer compares regex and RAG outputs and prepares fields for human review.
-8. Extraction and arbitration results are saved in MongoDB.
-9. The reviewer checks each field and action item in the review screen.
-10. After all items are approved, edited, or rejected, the reviewer submits the verified judgment.
-11. Verified data is saved and shown in the dashboard.
+6. The LLM is used for the first metadata pass on the judgment header. It extracts `Name_of_the_judge` and `Date_of_order` from the opening text, with fallback cleanup from the backend when the judge name is missing or malformed.
+7. RAG extraction uses the LLM over retrieved judgment context and final-order pages. It produces `Key_Directions`, `Compliance_Section`, `Compliance_Required`, `Key_Timelines`, `Responsible_Departments`, and `Nature_of_Action`.
+8. Appeal analysis uses extracted judgment signals to populate `Consideration_for_Appeal`, `Appeal_Justification`, `Appeal_Risk_Score`, and `LLM_Context`.
+9. The arbitration layer compares regex and RAG outputs and prepares fields for human review.
+10. Extraction and arbitration results are saved in MongoDB.
+11. The reviewer checks each field and action item in the review screen.
+12. After all items are approved, edited, or rejected, the reviewer submits the verified judgment.
+13. Verified data is saved and shown in the dashboard.
+
+## Where The LLM Is Used
+
+LexTrace does not use the LLM for every field. The backend combines deterministic extraction, LLM extraction, and human review.
+
+- Regex/rule-based extraction: case type, case number, court metadata, parties, dates, and other fields where predictable legal-document patterns are available.
+- LLM header metadata extraction: judge name and order date from the first part of the document.
+- LLM RAG extraction: final court directions, compliance sections, compliance steps, timelines, responsible departments, and nature of action.
+- LLM-supported appeal analysis: appeal consideration, justification, risk score, and the plain-English context summary shown to reviewers.
+- Human review: every important extracted field and action item is still reviewed, approved, edited, or rejected before dashboard use.
 
 ## Main User Flow
 
