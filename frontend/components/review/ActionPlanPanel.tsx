@@ -161,6 +161,8 @@ export default function ActionPlanPanel() {
   const [isOpen, setIsOpen] = useState(true);
   const [isContextOpen, setIsContextOpen] = useState(false);
 
+  const departmentChips = actionPlan?.responsible_departments ?? [];
+
   const totalActionItems = useMemo(() => {
     if (!actionPlan) {
       return 0;
@@ -320,21 +322,33 @@ export default function ActionPlanPanel() {
               </span>
             ) : null}
 
-            <div className="mb-2 flex flex-wrap gap-1">
-              {actionPlan.responsible_departments.length === 0 ? (
-                <p className="text-xs italic text-slate-400">
-                  Department: Not yet assigned
+            <div className="mb-3 rounded-2xl border border-slate-200 bg-white px-3 py-2">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+                  Responsible Departments
                 </p>
-              ) : (
-                actionPlan.responsible_departments.map((department) => (
-                  <span
-                    key={department}
-                    className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600"
-                  >
-                    {department}
+                {departmentChips.length > 0 ? (
+                  <span className="text-[11px] text-slate-400">
+                    Complete these actions
                   </span>
-                ))
-              )}
+                ) : null}
+              </div>
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {departmentChips.length === 0 ? (
+                  <p className="text-xs italic text-slate-400">
+                    Department: Not yet assigned
+                  </p>
+                ) : (
+                  departmentChips.map((department) => (
+                    <span
+                      key={department}
+                      className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-700"
+                    >
+                      {department}
+                    </span>
+                  ))
+                )}
+              </div>
             </div>
 
             {actionPlan.compliance_steps.map((step, index) => (
@@ -360,9 +374,23 @@ export default function ActionPlanPanel() {
                   <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-blue-100 text-sm font-semibold text-blue-700">
                     {index + 1}
                   </div>
-                  <p className="ml-3 flex-1 text-base font-medium leading-7 text-slate-900">
-                    {step.edited_text ?? step.text}
-                  </p>
+                    <div className="ml-3 flex-1">
+                      <p className="text-base font-medium leading-7 text-slate-900">
+                        {step.edited_text ?? step.text}
+                      </p>
+                      {departmentChips.length > 0 ? (
+                        <div className="mt-2 flex flex-wrap gap-1.5">
+                          {departmentChips.map((department) => (
+                            <span
+                              key={`${step.id}-${department}`}
+                              className="rounded-full bg-white/80 px-2.5 py-0.5 text-[11px] font-medium text-blue-700"
+                            >
+                              {department}
+                            </span>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
                 </div>
                 {step.source_page ? (
                   <p className="ml-10 mt-2 text-xs text-slate-500">
