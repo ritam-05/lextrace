@@ -120,6 +120,195 @@ FASTAPI_BASE_URL=https://ritam-05-lextrace.hf.space
 
 Do not commit `.env` files or secrets.
 
+## Set Up On A New PC
+
+Follow these steps when setting up LexTrace locally on a fresh Windows PC.
+
+### 1. Install Required Software
+
+Install these first:
+
+- Git: https://git-scm.com/downloads
+- Python 3.11: https://www.python.org/downloads/
+- Node.js LTS: https://nodejs.org/
+- MongoDB Atlas account or access to the existing Atlas connection string
+- Tesseract OCR for Windows: https://github.com/UB-Mannheim/tesseract/wiki
+- Poppler for Windows: https://github.com/oschwartz10612/poppler-windows/releases
+
+After installing Python and Node, open a new PowerShell window and check:
+
+```sh
+git --version
+python --version
+node --version
+npm --version
+```
+
+Python should be 3.11.x. Node should be an active LTS version.
+
+### 2. Clone The Repository
+
+Choose a folder where you keep projects, then run:
+
+```sh
+git clone https://github.com/ritam-05/lextrace.git
+cd lextrace
+```
+
+### 3. Create The Backend Virtual Environment
+
+From the repo root:
+
+```sh
+python -m venv venv311
+.\venv311\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+If PowerShell blocks virtual environment activation, run PowerShell as your user and allow local scripts:
+
+```sh
+Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
+```
+
+Then close and reopen PowerShell, go back to the repo, and activate again:
+
+```sh
+cd path\to\lextrace
+.\venv311\Scripts\Activate.ps1
+```
+
+### 4. Configure Backend Environment Variables
+
+Create a root `.env` file:
+
+```txt
+MONGO_URI=<MongoDB Atlas connection string>
+GROQ_API_KEY=<Groq API key>
+```
+
+The backend needs both values. `MONGO_URI` stores extraction and verification data. `GROQ_API_KEY` is used by the RAG generation pipeline.
+
+### 5. Make OCR Tools Available
+
+Tesseract and Poppler must be available in `PATH` for OCR/PDF fallback workflows.
+
+Typical Windows paths to add:
+
+```txt
+C:\Program Files\Tesseract-OCR
+C:\path\to\poppler\Library\bin
+```
+
+After updating `PATH`, open a new PowerShell window and check:
+
+```sh
+tesseract --version
+pdftoppm -v
+```
+
+### 6. Start The Backend
+
+From the repo root, with the virtual environment active:
+
+```sh
+uvicorn backend.app:app --reload --host 0.0.0.0 --port 8000
+```
+
+The first startup can take time because the embedding model is downloaded and loaded.
+
+Check the backend:
+
+```sh
+curl http://localhost:8000/health
+```
+
+Expected shape:
+
+```json
+{
+  "status": "active",
+  "database": "connected",
+  "embedding_model": "loaded",
+  "device": "cpu"
+}
+```
+
+Keep this backend terminal running.
+
+### 7. Install Frontend Dependencies
+
+Open a second PowerShell window:
+
+```sh
+cd path\to\lextrace\frontend
+npm install
+```
+
+### 8. Configure Frontend Environment Variables
+
+Create `frontend/.env.local`:
+
+```txt
+FASTAPI_BASE_URL=http://localhost:8000
+```
+
+This tells the Next.js API routes to call your local FastAPI backend.
+
+### 9. Start The Frontend
+
+From `frontend/`:
+
+```sh
+npm run dev
+```
+
+If PowerShell blocks `npm`, use:
+
+```sh
+npm.cmd run dev
+```
+
+Open the local app:
+
+```txt
+http://localhost:3000
+```
+
+### 10. Verify The Full Local Flow
+
+1. Open `http://localhost:3000`.
+2. Upload a judgment PDF.
+3. Wait for extraction and RAG processing to finish.
+4. Review all extracted fields and action items.
+5. Click Done after every item is verified.
+6. Confirm the dashboard opens with the verified judgment data.
+
+### 11. Useful Local Checks
+
+Frontend typecheck:
+
+```sh
+cd frontend
+npm.cmd run typecheck
+```
+
+Frontend production build:
+
+```sh
+cd frontend
+npm.cmd run build
+```
+
+Git status before committing:
+
+```sh
+git status --short
+```
+
+Generated folders such as `frontend/node_modules/`, `frontend/.next/`, and `venv311/` should stay untracked.
+
 ## Local Development
 
 Backend:
