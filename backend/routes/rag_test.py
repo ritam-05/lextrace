@@ -317,12 +317,17 @@ async def process_judgment(file: UploadFile = File(...)):
         if not paragraphs:
             raise HTTPException(status_code=400, detail="No paragraphs extracted from PDF.")
 
-        operative_section = isolate_operative_section(paragraphs)
+        # operative_section = isolate_operative_section(paragraphs)
         operative_paragraphs = (
             paragraphs[operative_section.start_para_index :]
             if operative_section.detected
             else paragraphs
         )
+        # operative_text = (
+        #     "\n\n".join([p.text for p in operative_paragraphs])
+        #     if operative_section.detected
+        #     else raw_text
+        # )
         operative_text = raw_text
 
         if _is_missing_judge_name(header_metadata.get("Name_of_the_judge")):
